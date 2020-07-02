@@ -9,18 +9,7 @@
 /* Nadathur Satish, Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm_spmdm.h>
-#include <libxsmm.h>
 #include "libxsmm_main.h"
-
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
 
 /* Enable/disable specific code paths */
 #if defined(LIBXSMM_INTRINSICS_AVX) && !defined(LIBXSMM_SPMDM_AVX)
@@ -38,17 +27,17 @@
 
 /* function pointer for the CPUID-dispatched implementation (separate typedef for legacy Cray C++ needed) */
 typedef void (*internal_spmdm_createSparseSlice_fp32_thread_fn)(const libxsmm_spmdm_handle*, char, const float*, libxsmm_CSR_sparseslice*, int, int, int);
-LIBXSMM_APIVAR(internal_spmdm_createSparseSlice_fp32_thread_fn internal_spmdm_createSparseSlice_fp32_thread);
+LIBXSMM_APIVAR_DEFINE(internal_spmdm_createSparseSlice_fp32_thread_fn internal_spmdm_createSparseSlice_fp32_thread);
 typedef void (*internal_spmdm_createSparseSlice_bfloat16_thread_fn)(const libxsmm_spmdm_handle*, char, const libxsmm_bfloat16*, libxsmm_CSR_sparseslice*, int, int, int);
-LIBXSMM_APIVAR(internal_spmdm_createSparseSlice_bfloat16_thread_fn internal_spmdm_createSparseSlice_bfloat16_thread);
+LIBXSMM_APIVAR_DEFINE(internal_spmdm_createSparseSlice_bfloat16_thread_fn internal_spmdm_createSparseSlice_bfloat16_thread);
 typedef void (*internal_spmdm_compute_fp32_thread_fn)(const libxsmm_spmdm_handle*, char, char, const float*, libxsmm_CSR_sparseslice*, const float*, char, const float*, float*, int, int, int);
-LIBXSMM_APIVAR(internal_spmdm_compute_fp32_thread_fn internal_spmdm_compute_fp32_thread);
+LIBXSMM_APIVAR_DEFINE(internal_spmdm_compute_fp32_thread_fn internal_spmdm_compute_fp32_thread);
 typedef void (*internal_spmdm_compute_bfloat16_thread_fn)(const libxsmm_spmdm_handle*, char, char, const libxsmm_bfloat16*, libxsmm_CSR_sparseslice*, const libxsmm_bfloat16*, char, const libxsmm_bfloat16*, float*, int, int, int);
-LIBXSMM_APIVAR(internal_spmdm_compute_bfloat16_thread_fn internal_spmdm_compute_bfloat16_thread);
+LIBXSMM_APIVAR_DEFINE(internal_spmdm_compute_bfloat16_thread_fn internal_spmdm_compute_bfloat16_thread);
 
 #if defined(LIBXSMM_SPMDM_AVX)
-LIBXSMM_APIVAR(__m256i* internal_spmdm_shufmasks_32);
-LIBXSMM_APIVAR(__m256i* internal_spmdm_shufmasks_16);
+LIBXSMM_APIVAR_DEFINE(__m256i* internal_spmdm_shufmasks_32);
+LIBXSMM_APIVAR_DEFINE(__m256i* internal_spmdm_shufmasks_16);
 #endif
 
 
@@ -246,8 +235,8 @@ void libxsmm_spmdm_createSparseSlice_fp32_thread(
   /* if highest implemented code path is statically present, no need for an indirect call (function pointer) */
 #if (LIBXSMM_X86_AVX512_CORE <= LIBXSMM_STATIC_TARGET_ARCH) && defined(LIBXSMM_SPMDM_AVX512_CORE)
   internal_spmdm_createSparseSlice_fp32_thread_avx512_core(handle, transa, a, libxsmm_output_csr_a, block_id, tid, nthreads);
-#elif (LIBXSMM_X86_AVX2 <= LIBXSMM_STATIC_TARGET_ARCH) && /* eventually no need for an indirect call */ \
-      (LIBXSMM_STATIC_TARGET_ARCH == LIBXSMM_MAX_STATIC_TARGET_ARCH)
+#elif (LIBXSMM_X86_AVX2 <= LIBXSMM_STATIC_TARGET_ARCH) && /* no need for an indirect call */ \
+      (LIBXSMM_X86_AVX512_CORE > LIBXSMM_MAX_STATIC_TARGET_ARCH)
   internal_spmdm_createSparseSlice_fp32_thread_avx2(handle, transa, a, libxsmm_output_csr_a, block_id, tid, nthreads);
 #else /* pointer based function call */
   LIBXSMM_ASSERT(0 != internal_spmdm_createSparseSlice_fp32_thread);
@@ -323,8 +312,8 @@ void libxsmm_spmdm_createSparseSlice_bfloat16_thread(
   /* if highest implemented code path is statically present, no need for an indirect call (function pointer) */
 #if (LIBXSMM_X86_AVX512_CORE <= LIBXSMM_STATIC_TARGET_ARCH) && defined(LIBXSMM_SPMDM_AVX512_CORE)
   internal_spmdm_createSparseSlice_bfloat16_thread_avx512_core(handle, transa, a, libxsmm_output_csr_a, block_id, tid, nthreads);
-#elif (LIBXSMM_X86_AVX2 <= LIBXSMM_STATIC_TARGET_ARCH) && /* eventually no need for an indirect call */ \
-      (LIBXSMM_STATIC_TARGET_ARCH == LIBXSMM_MAX_STATIC_TARGET_ARCH)
+#elif (LIBXSMM_X86_AVX2 <= LIBXSMM_STATIC_TARGET_ARCH) && /* no need for an indirect call */ \
+      (LIBXSMM_X86_AVX512_CORE > LIBXSMM_MAX_STATIC_TARGET_ARCH)
   internal_spmdm_createSparseSlice_bfloat16_thread_avx2(handle, transa, a, libxsmm_output_csr_a, block_id, tid, nthreads);
 #else /* pointer based function call */
   LIBXSMM_ASSERT(0 != internal_spmdm_createSparseSlice_fp32_thread);
@@ -420,8 +409,8 @@ void libxsmm_spmdm_compute_fp32_thread(
   /* if highest implemented code path is statically present, no need for an indirect call (function pointer) */
 #if (LIBXSMM_X86_AVX512_CORE <= LIBXSMM_STATIC_TARGET_ARCH) && defined(LIBXSMM_SPMDM_AVX512_CORE)
   internal_spmdm_compute_fp32_thread_avx512_core(handle, transa, transb, alpha, a_sparse, b, transc, beta, c, block_id, tid, nthreads);
-#elif (LIBXSMM_X86_AVX2 <= LIBXSMM_STATIC_TARGET_ARCH) && /* eventually no need for an indirect call */ \
-      (LIBXSMM_STATIC_TARGET_ARCH == LIBXSMM_MAX_STATIC_TARGET_ARCH)
+#elif (LIBXSMM_X86_AVX2 <= LIBXSMM_STATIC_TARGET_ARCH) && /* no need for an indirect call */ \
+      (LIBXSMM_X86_AVX512_CORE > LIBXSMM_MAX_STATIC_TARGET_ARCH)
   internal_spmdm_compute_fp32_thread_avx2(handle, transa, transb, alpha, a_sparse, b, transc, beta, c, block_id, tid, nthreads);
 #else /* pointer based function call */
   LIBXSMM_ASSERT(0 != internal_spmdm_compute_fp32_thread);
@@ -517,8 +506,8 @@ void libxsmm_spmdm_compute_bfloat16_thread(
   /* if highest implemented code path is statically present, no need for an indirect call (function pointer) */
 #if (LIBXSMM_X86_AVX512_CORE <= LIBXSMM_STATIC_TARGET_ARCH) && defined(LIBXSMM_SPMDM_AVX512_CORE)
   internal_spmdm_compute_bfloat16_thread_avx512_core(handle, transa, transb, alpha, a_sparse, b, transc, beta, c, block_id, tid, nthreads);
-#elif (LIBXSMM_X86_AVX2 <= LIBXSMM_STATIC_TARGET_ARCH) && /* eventually no need for an indirect call */ \
-      (LIBXSMM_STATIC_TARGET_ARCH == LIBXSMM_MAX_STATIC_TARGET_ARCH)
+#elif (LIBXSMM_X86_AVX2 <= LIBXSMM_STATIC_TARGET_ARCH) && /* no need for an indirect call */ \
+      (LIBXSMM_X86_AVX512_CORE > LIBXSMM_MAX_STATIC_TARGET_ARCH)
   internal_spmdm_compute_bfloat16_thread_avx2(handle, transa, transb, alpha, a_sparse, b, transc, beta, c, block_id, tid, nthreads);
 #else /* pointer based function call */
   LIBXSMM_ASSERT(0 != internal_spmdm_compute_bfloat16_thread);
@@ -577,23 +566,23 @@ LIBXSMM_API void libxsmm_spmdm_init(int M, int N, int K, int max_threads,
     handle->bn = 6;
   }
   handle->bk = 128;
-  handle->mb = (handle->m + handle->bm - 1) / handle->bm;
-  handle->nb = (handle->n + handle->bn - 1) / handle->bn;
-  handle->kb = (handle->k + handle->bk - 1) / handle->bk;
+  handle->mb = LIBXSMM_UPDIV(handle->m, handle->bm);
+  handle->nb = LIBXSMM_UPDIV(handle->n, handle->bn);
+  handle->kb = LIBXSMM_UPDIV(handle->k, handle->bk);
 
   max_work_per_block    = handle->bm * handle->bn;
   avg_work_per_block    = (double)((size_t)handle->m * handle->n) / ((size_t)handle->mb * handle->nb);
   load_imbalance_1      = max_work_per_block / avg_work_per_block;
-  max_blocks_per_thread = (handle->mb * handle->nb + max_threads - 1) / max_threads;
+  max_blocks_per_thread = LIBXSMM_UPDIV(handle->mb * handle->nb, max_threads);
   avg_blocks_per_thread = (double)handle->mb * handle->nb / max_threads;
   load_imbalance_2      = max_blocks_per_thread / avg_blocks_per_thread;
   load_imbalance        = load_imbalance_1 * load_imbalance_2;
 
   while (32 < handle->bm && load_imbalance > load_imbalance_tolerate) {
     handle->bm--;
-    handle->mb = (handle->m + handle->bm - 1) / handle->bm;
+    handle->mb = LIBXSMM_UPDIV(handle->m, handle->bm);
 
-    max_blocks_per_thread = (handle->mb * handle->nb + max_threads - 1) / max_threads;
+    max_blocks_per_thread = LIBXSMM_UPDIV(handle->mb * handle->nb, max_threads);
     avg_blocks_per_thread = (double)handle->mb * handle->nb / max_threads;
     load_imbalance_2      = max_blocks_per_thread / avg_blocks_per_thread;
     max_work_per_block    = handle->bm * handle->bn;

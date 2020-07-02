@@ -26,6 +26,10 @@ void libxsmm_x86_instruction_open_stream( libxsmm_generated_code*       io_gener
                                           const libxsmm_gp_reg_mapping* i_gp_reg_mapping,
                                           unsigned int                  i_prefetch );
 
+LIBXSMM_API_INTERN
+void libxsmm_x86_instruction_open_stream_amx( libxsmm_generated_code*   io_generated_code,
+                                          const libxsmm_gp_reg_mapping* i_gp_reg_mapping,
+                                          unsigned int                  i_prefetch );
 /**
  * Closes the inline assembly section / jit stream
  *
@@ -35,6 +39,11 @@ void libxsmm_x86_instruction_open_stream( libxsmm_generated_code*       io_gener
  */
 LIBXSMM_API_INTERN
 void libxsmm_x86_instruction_close_stream( libxsmm_generated_code*       io_generated_code,
+                                           const libxsmm_gp_reg_mapping* i_gp_reg_mapping,
+                                           unsigned int                  i_prefetch );
+
+LIBXSMM_API_INTERN
+void libxsmm_x86_instruction_close_stream_amx( libxsmm_generated_code*   io_generated_code,
                                            const libxsmm_gp_reg_mapping* i_gp_reg_mapping,
                                            unsigned int                  i_prefetch );
 
@@ -385,12 +394,36 @@ void libxsmm_x86_instruction_pop_reg( libxsmm_generated_code* io_generated_code,
  * @param i_mask_instr actual mask move instruction
  * @param i_gp_reg_number the register number (rax=0,rcx=1,rdx=2,rbx=3,rsp=4,rbp=5,rsi=6,rdi=7,r8=8,r9=9,r10=10,r11=11,r12=12,r13=13,r14=14,r15=15) of the base address register
  * @param i_mask_reg_number the register number (k1=1...k7=7)
+ * @param i_is_store indicates if we wnat to move the mask to gpr
  */
 LIBXSMM_API_INTERN
 void libxsmm_x86_instruction_mask_move( libxsmm_generated_code* io_generated_code,
                                         const unsigned int      i_mask_instr,
                                         const unsigned int      i_gp_reg_number,
-                                        const unsigned int      i_mask_reg_number );
+                                        const unsigned int      i_mask_reg_number,
+                                        const unsigned int      i_is_store );
+
+/**
+ * Allows for mask move instructions in AVX512
+ *
+ * @param io_generated_code pointer to the pointer of the generated code structure
+ * @param i_mask_instr actual mask move instruction
+ * @param i_gp_reg_base base address register for memory broadcast
+ * @param i_gp_reg_idx index register for memory broadcast, can be LIBXSMM_X86_GP_REG_UNDEF -> then regular displacement version is generated
+ * @param i_scale scale of index register, ignored if i_gp_reg_idx is LIBXSMM_X86_GP_REG_UNDEF
+ * @param i_displacement displacement to SIB address
+ * @param i_mask_reg_number the register number (k1=1...k7=7)
+ * @param i_is_store indicates if we wnat to move the mask to gpr
+ */
+LIBXSMM_API_INTERN
+void libxsmm_x86_instruction_mask_move_mem( libxsmm_generated_code* io_generated_code,
+                                            const unsigned int      i_mask_instr,
+                                            const unsigned int      i_gp_reg_base,
+                                            const unsigned int      i_gp_reg_idx,
+                                            const unsigned int      i_scale,
+                                            const int               i_displacement,
+                                            const unsigned int      i_mask_reg_number,
+                                            const unsigned int      i_is_store );
 
 /**
  * Allows for mask move instructions in AVX512
@@ -513,6 +546,15 @@ LIBXSMM_API_INTERN
 void libxsmm_x86_instruction_close_stream_matcopy( libxsmm_generated_code*       io_generated_code,
                                                    const char*                   i_arch );
 
+
+LIBXSMM_API_INTERN
+void libxsmm_x86_instruction_open_stream_mateltwise( libxsmm_generated_code*                   io_generated_code,
+                                                  const unsigned int                        i_gp_struct_params,
+                                                  const char*                               i_arch );
+
+LIBXSMM_API_INTERN
+void libxsmm_x86_instruction_close_stream_mateltwise( libxsmm_generated_code*       io_generated_code,
+                                                   const char*                   i_arch );
 /**
  * @TODO: clean-up
  * Opens the inline assembly section / jit stream for transposes, this is hacked and should be cleaned up
@@ -538,6 +580,69 @@ void libxsmm_x86_instruction_open_stream_transpose( libxsmm_generated_code*     
 LIBXSMM_API_INTERN
 void libxsmm_x86_instruction_close_stream_transpose( libxsmm_generated_code*       io_generated_code,
                                                      const char*                   i_arch );
+
+/**
+ * Generates ld/stconfig/tilerelease instructions
+ *
+ * @param io_generated_code pointer to the pointer of the generated code structure
+ * @param i_id id of AMX region
+ * @param i_instruction_set requested instruction set to encode
+ * @param i_tcontrol_instr actual tile mem instruction variant
+ * @param i_gp_reg_base base register which address where to store/load tile config
+ * @param i_displacement displacement to i_gp_reg_base
+ * @param i_tile_config pointer to tile config structure
+ */
+LIBXSMM_API_INTERN
+void libxsmm_x86_instruction_tile_control( libxsmm_generated_code*    io_generated_code,
+                                           const unsigned int         i_id,
+                                           const unsigned int         i_instruction_set,
+                                           const unsigned int         i_tcontrol_instr,
+                                           const unsigned int         i_gp_reg_base,
+                                           const int                  i_displacement,
+                                           const libxsmm_tile_config* i_tile_config );
+
+
+/**
+ * Generates tilemove/tilestore instructions
+ *
+ * @param io_generated_code pointer to the pointer of the generated code structure
+ * @param i_instruction_set requested instruction set to encode
+ * @param i_tmove_instr actual tile mem instruction variant
+ * @param i_gp_reg_base the base register number (rax=0,rcx=1,rdx=2,rbx=3,rsp=4,rbp=5,rsi=6,rdi=7,r8=8,r9=9,r10=10,r11=11,r12=12,r13=13,r14=14,r15=15) of the base address register
+ * @param i_gp_reg_idx the base register number (rax=0,rcx=1,rdx=2,rbx=3,rsp=4,rbp=5,rsi=6,rdi=7,r8=8,r9=9,r10=10,r11=11,r12=12,r13=13,r14=14,r15=15) of the base address register
+ * @param i_scale scaling factor of idx
+ * @param i_displacement the offset to the base address
+ * @param i_tile_reg_number_0 the tile register number (tmm: 0-7)
+ */
+LIBXSMM_API_INTERN
+void libxsmm_x86_instruction_tile_move( libxsmm_generated_code* io_generated_code,
+                                        const unsigned int      i_instruction_set,
+                                        const unsigned int      i_tmove_instr,
+                                        const unsigned int      i_gp_reg_base,
+                                        const unsigned int      i_gp_reg_idx,
+                                        const unsigned int      i_scale,
+                                        const int               i_displacement,
+                                        const unsigned int      i_tile_reg_number );
+
+
+/**
+ * Generates tilecompute instructions
+ *
+ * @param io_generated_code pointer to the pointer of the generated code structure
+ * @param i_instruction_set requested instruction set to encode
+ * @param i_tcompute_instr actual tile compute instruction variant
+ * @param i_tile_src_reg_number_0 the 1st src tile register number (tmm: 0-7)
+ * @param i_tile_src_reg_number_1 the 2nd src tile register number (tmm: 0-7) (might be ignored by some instuctions)
+ * @param i_tile_dst_reg_number the dst tile register number (tmm: 0-7)
+ */
+LIBXSMM_API_INTERN
+void libxsmm_x86_instruction_tile_compute( libxsmm_generated_code* io_generated_code,
+                                           const unsigned int      i_instruction_set,
+                                           const unsigned int      i_tcompute_instr,
+                                           const unsigned int      i_tile_src_reg_number_0,
+                                           const unsigned int      i_tile_src_reg_number_1,
+                                           const unsigned int      i_tile_dst_reg_number );
+
 
 #endif /* GENERATOR_X86_INSTRUCTIONS_H */
 

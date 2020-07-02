@@ -18,37 +18,46 @@
 #else
 # define LIBXSMM_MEMSET127(PTRDST, VALUE, SIZE) { \
   char *const libxsmm_memset127_dst_ = (char*)(PTRDST); \
-  union { size_t size; signed char value; } libxsmm_memset127_size_ = { (SIZE) }; \
+  union { size_t size; signed char size1; } libxsmm_memset127_; \
   signed char libxsmm_memset127_i_; LIBXSMM_ASSERT((SIZE) <= 127); \
+  libxsmm_memset127_.size = (SIZE); \
   LIBXSMM_PRAGMA_UNROLL \
-  for (libxsmm_memset127_i_ = 0; libxsmm_memset127_i_ < libxsmm_memset127_size_.value; ++libxsmm_memset127_i_) { \
+  for (libxsmm_memset127_i_ = 0; libxsmm_memset127_i_ < libxsmm_memset127_.size1; \
+    ++libxsmm_memset127_i_) \
+  { \
     libxsmm_memset127_dst_[libxsmm_memset127_i_] = (char)(VALUE); \
   } \
 }
 #endif
 #define LIBXSMM_MEMZERO127(PTRDST) LIBXSMM_MEMSET127(PTRDST, '\0', sizeof(*(PTRDST)))
 
-#define LIBXSMM_MEMCPY127(PTRDST, PTRSRC, SIZE) { \
-  const unsigned char *const libxsmm_memcpy127_src_ = (const unsigned char*)(PTRSRC); \
-  unsigned char *const libxsmm_memcpy127_dst_ = (unsigned char*)(PTRDST); \
-  signed char libxsmm_memcpy127_i_; LIBXSMM_ASSERT((SIZE) <= 127); \
-  LIBXSMM_PRAGMA_UNROLL \
-  for (libxsmm_memcpy127_i_ = 0; libxsmm_memcpy127_i_ < (signed char)(SIZE); ++libxsmm_memcpy127_i_) { \
-    libxsmm_memcpy127_dst_[libxsmm_memcpy127_i_] = libxsmm_memcpy127_src_[libxsmm_memcpy127_i_]; \
+#define LIBXSMM_MEMCPY127_LOOP(PTRDST, PTRSRC, SIZE, NTS) { \
+  const unsigned char *const libxsmm_memcpy127_loop_src_ = (const unsigned char*)(PTRSRC); \
+  unsigned char *const libxsmm_memcpy127_loop_dst_ = (unsigned char*)(PTRDST); \
+  signed char libxsmm_memcpy127_loop_i_; LIBXSMM_ASSERT((SIZE) <= 127); \
+  LIBXSMM_PRAGMA_UNROLL NTS(libxsmm_memcpy127_loop_dst_) \
+  for (libxsmm_memcpy127_loop_i_ = 0; libxsmm_memcpy127_loop_i_ < (signed char)(SIZE); \
+    ++libxsmm_memcpy127_loop_i_) \
+  { \
+    libxsmm_memcpy127_loop_dst_[libxsmm_memcpy127_loop_i_] = \
+    libxsmm_memcpy127_loop_src_[libxsmm_memcpy127_loop_i_]; \
   } \
 }
+#define LIBXSMM_MEMCPY127_NTS(...)
+#define LIBXSMM_MEMCPY127(PTRDST, PTRSRC, SIZE) \
+  LIBXSMM_MEMCPY127_LOOP(PTRDST, PTRSRC, SIZE, LIBXSMM_MEMCPY127_NTS)
 #define LIBXSMM_ASSIGN127(PTRDST, PTRSRC) LIBXSMM_ASSERT(sizeof(*(PTRSRC)) <= sizeof(*(PTRDST))); \
   LIBXSMM_MEMCPY127(PTRDST, PTRSRC, sizeof(*(PTRSRC)))
 
 
 /**
- * Calculate if there is a difference between two (short) buffers.
+ * Calculates if there is a difference between two (short) buffers.
  * Returns zero if there is no difference; otherwise non-zero.
  */
 LIBXSMM_API unsigned char libxsmm_diff(const void* a, const void* b, unsigned char size);
 
 /**
- * Calculate if there is a difference between "a" and "n x b".
+ * Calculates if there is a difference between "a" and "n x b".
  * Returns the index of the first match (or "n" in case of no match).
  */
 LIBXSMM_API unsigned int libxsmm_diff_n(const void* a, const void* bn, unsigned char size,

@@ -12,15 +12,6 @@
 #include <libxsmm_generator.h>
 #include <libxsmm_memory.h>
 
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <string.h>
-#include <stdio.h>
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
-
 #if defined(LIBXSMM_PLATFORM_SUPPORTED)
 /* XGETBV: receive results (EAX, EDX) for eXtended Control Register (XCR). */
 /* CPUID, receive results (EAX, EBX, ECX, EDX) for requested FUNCTION/SUBFN. */
@@ -74,13 +65,24 @@ LIBXSMM_API int libxsmm_cpuid_x86(libxsmm_cpuid_x86_info* info)
   unsigned int eax, ebx, ecx, edx;
   LIBXSMM_CPUID_X86(0, 0/*ecx*/, eax, ebx, ecx, edx);
   if (1 <= eax) { /* CPUID max. leaf */
-    if (NULL != info) {
-      LIBXSMM_CPUID_X86(0x80000007, 0/*ecx*/, eax, ebx, ecx, edx);
-      info->constant_tsc = LIBXSMM_CPUID_CHECK(edx, 0x00000100);
-    }
-    if (LIBXSMM_TARGET_ARCH_UNKNOWN == result) { /* detect CPU-feature only once */
-      int feature_cpu = LIBXSMM_X86_GENERIC, feature_os = LIBXSMM_X86_GENERIC;
+    /* avoid redetecting features but redetect on request (info given) */
+    if (LIBXSMM_TARGET_ARCH_UNKNOWN == result || NULL != info) {
+      int feature_cpu = LIBXSMM_X86_GENERIC, feature_os = LIBXSMM_X86_GENERIC, has_context = 0;
       unsigned int maxleaf = eax;
+# if defined(__linux__)
+      if (0 == libxsmm_se) {
+        FILE *const selinux = fopen("/sys/fs/selinux/enforce", "rb");
+        if (NULL != selinux) {
+          if (1 == fread(&libxsmm_se, 1/*sizeof(char)*/, 1/*count*/, selinux)) {
+            libxsmm_se = ('0' != libxsmm_se ? 1 : 0);
+          }
+          else { /* conservative assumption in case of read-error */
+            libxsmm_se = 1;
+          }
+          fclose(selinux);
+        }
+      }
+# endif
       LIBXSMM_CPUID_X86(1, 0/*ecx*/, eax, ebx, ecx, edx);
       /* Check for CRC32 (this is not a proper test for SSE 4.2 as a whole!) */
       if (LIBXSMM_CPUID_CHECK(ecx, 0x00100000)) {
@@ -93,14 +95,18 @@ LIBXSMM_API int libxsmm_cpuid_x86(libxsmm_cpuid_x86_info* info)
               /* AVX512DQ(0x00020000), AVX512BW(0x40000000), AVX512VL(0x80000000) */
               if (LIBXSMM_CPUID_CHECK(ebx, 0xC0020000)) { /* AVX512-Core */
                 if (LIBXSMM_CPUID_CHECK(ecx2, 0x00000800)) { /* VNNI */
+                  unsigned int edx2; /* we need to save edx for AMX check */
 # if 0 /* no check required yet */
                   unsigned int ecx3;
                   LIBXSMM_CPUID_X86(7, 1/*ecx*/, eax, ebx, ecx3, edx);
 # else
-                  LIBXSMM_CPUID_X86(7, 1/*ecx*/, eax, ebx, ecx2, edx);
+                  LIBXSMM_CPUID_X86(7, 1/*ecx*/, eax, ebx, ecx2, edx2);
 # endif
                   if (LIBXSMM_CPUID_CHECK(eax, 0x00000020)) { /* BF16 */
                     feature_cpu = LIBXSMM_X86_AVX512_CPX;
+                    if (LIBXSMM_CPUID_CHECK(edx, 0x03400000)) { /* AMX-TILE, AMX-INT8, AMX-BF16 */
+                      feature_cpu = LIBXSMM_X86_AVX512_SPR;
+                    }
                   }
                   else feature_cpu = LIBXSMM_X86_AVX512_CLX; /* CLX */
                 }
@@ -124,6 +130,7 @@ LIBXSMM_API int libxsmm_cpuid_x86(libxsmm_cpuid_x86_info* info)
 # if !defined(LIBXSMM_INTRINSICS_DEBUG)
       LIBXSMM_ASSERT_MSG(LIBXSMM_STATIC_TARGET_ARCH <= LIBXSMM_MAX(LIBXSMM_X86_SSE3, feature_cpu),
         /* TODO: confirm SSE3 */"missed detecting ISA extensions");
+      /* coverity[dead_error_line] */
       if (LIBXSMM_STATIC_TARGET_ARCH > feature_cpu) feature_cpu = LIBXSMM_STATIC_TARGET_ARCH;
 # endif
       /* XSAVE/XGETBV(0x04000000), OSXSAVE(0x08000000) */
@@ -133,40 +140,58 @@ LIBXSMM_API int libxsmm_cpuid_x86(libxsmm_cpuid_x86_info* info)
           LIBXSMM_XGETBV(0, eax, edx);
           if (LIBXSMM_CPUID_CHECK(eax, 0x00000006)) { /* OS XSAVE 256-bit */
             feature_os = LIBXSMM_MIN(LIBXSMM_X86_AVX2, feature_cpu);
-            if (LIBXSMM_X86_AVX512 <= feature_cpu && 7 <= maxleaf
-              && LIBXSMM_CPUID_CHECK(eax, 0x000000E0)) /* OS XSAVE 512-bit */
-            {
-              feature_os = feature_cpu; /* unlimited */
+            if (LIBXSMM_CPUID_CHECK(eax, 0x000000E0)) { /* OS XSAVE 512-bit */
+              feature_os = LIBXSMM_MIN(LIBXSMM_X86_AVX512_CPX, feature_cpu);
+              if (LIBXSMM_X86_AVX512_SPR <= feature_cpu && 7 <= maxleaf
+                && LIBXSMM_CPUID_CHECK(eax, 0x00060000)) /* OS XSAVE 512-bit */
+              {
+                feature_os = feature_cpu; /* unlimited AMX */
+              }
             }
           }
         }
       }
       else feature_os = LIBXSMM_TARGET_ARCH_GENERIC;
-      if (0 != libxsmm_verbosity) { /* library code is expected to be mute */
+      has_context = (LIBXSMM_STATIC_TARGET_ARCH >= feature_cpu || feature_os >= feature_cpu) ? 1 : 0;
+      if (LIBXSMM_TARGET_ARCH_UNKNOWN == result && 0 != libxsmm_verbosity) { /* library code is expected to be mute */
         const int target_vlen32 = libxsmm_cpuid_vlen32(feature_cpu);
         const char *const compiler_support = (libxsmm_cpuid_vlen32(LIBXSMM_MAX_STATIC_TARGET_ARCH) < target_vlen32
           ? "" : (((2 <= libxsmm_verbosity || 0 > libxsmm_verbosity) && LIBXSMM_MAX_STATIC_TARGET_ARCH < feature_cpu)
             ? "highly " : NULL));
-        int warnings = 0;
 # if !defined(NDEBUG) && defined(__OPTIMIZE__)
         fprintf(stderr, "LIBXSMM WARNING: library is optimized without -DNDEBUG and contains debug code!\n");
-        ++warnings;
 # endif
         if (NULL != compiler_support) {
-          fprintf(stderr, "LIBXSMM WARNING: missing support for %soptimized non-JIT code paths!\n", compiler_support);
-          ++warnings;
+          const char *const name = libxsmm_cpuid_name( /* exclude MIC when running on Core processors */
+            (((LIBXSMM_X86_AVX512_MIC == LIBXSMM_MAX_STATIC_TARGET_ARCH) ||
+              (LIBXSMM_X86_AVX512_KNM == LIBXSMM_MAX_STATIC_TARGET_ARCH)) && (LIBXSMM_X86_AVX512_CORE <= feature_cpu))
+              ? LIBXSMM_X86_AVX2 : LIBXSMM_MAX_STATIC_TARGET_ARCH);
+          fprintf(stderr, "LIBXSMM WARNING: %soptimized non-JIT code paths are limited to \"%s\"!\n", compiler_support, name);
         }
-        if (LIBXSMM_STATIC_TARGET_ARCH < feature_cpu && feature_os < feature_cpu) {
+# if !defined(__APPLE__) || !defined(__MACH__) /* permitted features */
+        if (0 == has_context) {
           fprintf(stderr, "LIBXSMM WARNING: detected CPU features are not permitted by the OS!\n");
-          ++warnings;
+          if (0 == libxsmm_se) {
+            fprintf(stderr, "LIBXSMM WARNING: downgraded code generation to supported features!\n");
+          }
         }
-        if (0 != warnings) fprintf(stderr, "\n");
-      }
-# if 0 /* permitted features */
-      result = LIBXSMM_MIN(feature_cpu, feature_os);
-# else /* opportunistic */
-      result = feature_cpu;
 # endif
+      }
+      /* macOS is faulting AVX-512 (on-demand larger state) */
+      result = feature_cpu;
+# if !defined(__APPLE__) || !defined(__MACH__)
+#   if 0 /* opportunistic */
+      if (0 == libxsmm_se)
+#   endif
+      { /* only permitted features */
+        result = LIBXSMM_MIN(feature_cpu, feature_os);
+      }
+# endif
+      if (NULL != info) {
+        LIBXSMM_CPUID_X86(0x80000007, 0/*ecx*/, eax, ebx, ecx, edx);
+        info->constant_tsc = LIBXSMM_CPUID_CHECK(edx, 0x00000100);
+        info->has_context = has_context;
+      }
     }
   }
   else {
@@ -188,6 +213,9 @@ LIBXSMM_API const char* libxsmm_cpuid_name(int id)
 {
   const char* target_arch = NULL;
   switch (id) {
+    case LIBXSMM_X86_AVX512_SPR: {
+      target_arch = "spr";
+    } break;
     case LIBXSMM_X86_AVX512_CPX: {
       target_arch = "cpx";
     } break;

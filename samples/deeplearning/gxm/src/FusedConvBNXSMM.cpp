@@ -58,7 +58,7 @@ FusedConvBNXSMM::FusedConvBNXSMM(FusedConvBNImplParams* gp, int engine) : FusedC
   if(gp->out_data_type == DT_FLOAT)
     conv_desc.options = LIBXSMM_DNN_CONV_OPTION_OVERWRITE;
   else if(gp->out_data_type == DT_BF16)
-    conv_desc.options = LIBXSMM_DNN_CONV_OPTION_F32_BF16_CVT_RNE_OVERWRITE;
+    conv_desc.options = LIBXSMM_DNN_CONV_OPTION_OVERWRITE;
 
   if(gp->in_data_type == DT_BF16 && gp->out_data_type == DT_FLOAT)
   {
@@ -977,11 +977,11 @@ void FusedConvBNXSMM::forwardPropagate(vector<TensorBuf *>& inp, TensorBuf *weig
           if(s==n && tid % ntps == 0)
           {
             for (int b = 0; b < nBOfm; ++b) {
-              __m512 vbm = _mm512_load_ps(&bmean[b][0]);
-              __m512 vbvar = _mm512_load_ps(&bvar[b][0]);
+              __m512 vbm = _mm512_loadu_ps(&bmean[b][0]);
+              __m512 vbvar = _mm512_loadu_ps(&bvar[b][0]);
 
-              _mm512_store_ps( &(gexp[b*VLEN]), _mm512_add_ps(_mm512_mul_ps(_mm512_load_ps( &(gexp[b*VLEN]) ), vmmf), vbm));
-              _mm512_store_ps( &(gv[b*VLEN]), _mm512_add_ps( _mm512_mul_ps( _mm512_load_ps( &(gv[b*VLEN]) ), vmmf), _mm512_mul_ps(vnhw_ratio, vbvar)));
+              _mm512_storeu_ps( &(gexp[b*VLEN]), _mm512_add_ps(_mm512_mul_ps(_mm512_loadu_ps( &(gexp[b*VLEN]) ), vmmf), vbm));
+              _mm512_storeu_ps( &(gv[b*VLEN]), _mm512_add_ps( _mm512_mul_ps( _mm512_loadu_ps( &(gv[b*VLEN]) ), vmmf), _mm512_mul_ps(vnhw_ratio, vbvar)));
             }
           }
         }

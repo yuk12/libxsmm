@@ -52,54 +52,73 @@ int main(int argc, char* argv[])
   const size_t nc = ((sizeof(T) * ldc * n + PAD - 1) & ~(PAD - 1)) / sizeof(T);
   /* calculate default batch-size to hit work-set size of approx. 2 GB */
   const int size = (0 >= batchsize ? static_cast<int>((2ULL << 30/*2 GB*/) / (sizeof(T) * (na + nb + nc))) : batchsize);
+#if defined(SHUFFLE)
+  const size_t shuffle = libxsmm_shuffle((unsigned int)size);
+#endif
   size_t sa = sizeof(T) * na * size + PAD - 1;
   size_t sb = sizeof(T) * nb * size + PAD - 1;
   size_t sc = sizeof(T) * nc * size + PAD - 1;
   /* allocate A, B, and C matrix buffers */
   void *const va = malloc(sa), *const vb = malloc(sb), *const vc = malloc(sc), *wa = va, *wb = vb, *wc = vc;
   /* align memory according to PAD */
+#if defined(PAD) && (1 < (PAD))
   T *const pa = static_cast<T*>(std::align(PAD, sa - PAD + 1, wa, sa));
   T *const pb = static_cast<T*>(std::align(PAD, sb - PAD + 1, wb, sb));
   T *const pc = static_cast<T*>(std::align(PAD, sc - PAD + 1, wc, sc));
+#else
+  T *const pa = static_cast<T*>(wa);
+  T *const pb = static_cast<T*>(wb);
+  T *const pc = static_cast<T*>(wc);
+#endif
   const double scale = 1.0 / size;
   blaze::timing::WcTimer timer;
 
   /* initialize data according to touch-first policy */
-#if defined(_OPENMP) && !defined(SYNC)
+#if defined(_OPENMP)
 # pragma omp parallel for
 #endif
   for (int i = 0; i < size; ++i) {
-    init(25 + i, pa + i * na, m, k, lda, scale);
-    init(75 + i, pb + i * nb, k, n, ldb, scale);
+#if defined(SHUFFLE)
+    const int j = (i * shuffle) % size;
+#else
+    const int j = i;
+#endif
+    init(25 + i, pa + j * na, m, k, lda, scale);
+    init(75 + i, pb + j * nb, k, n, ldb, scale);
     if (0 != beta) { /* no need to initialize for beta=0 */
-      init(42 + i, pc + i * nc, m, n, ldc, scale);
+      init(42 + i, pc + j * nc, m, n, ldc, scale);
     }
   }
 
-#if defined(_OPENMP) && !defined(SYNC)
+#if defined(_OPENMP)
 # pragma omp parallel
 #endif
   {
-#if !defined(_OPENMP) || defined(SYNC)
-    timer.start();
-#else /* OpenMP thread pool is already populated (parallel region) */
+#if defined(_OPENMP)
 #   pragma omp single
+#endif
     timer.start();
+#if defined(_OPENMP)
 #   pragma omp for
 #endif
     for (int i = 0; i < size; ++i) {
-      const matrix_type a(pa + STREAM_A(i * na), m, k, lda);
-      const matrix_type b(pb + STREAM_B(i * nb), k, n, ldb);
-            matrix_type c(pc + STREAM_C(i * nc), m, n, ldc);
+#if defined(SHUFFLE)
+      const int j = (i * shuffle) % size;
+#else
+      const int j = i;
+#endif
+      const matrix_type a(pa + STREAM_A(j * na), m, k, lda);
+      const matrix_type b(pb + STREAM_B(j * nb), k, n, ldb);
+            matrix_type c(pc + STREAM_C(j * nc), m, n, ldc);
       /**
        * Expression templates attempt to delay evaluation until the sequence point
        * is reached, or an "expression object" goes out of scope and hence must
        * materialize the effect. Ideally, a complex expression is mapped to the
-       * best possible implementation e.g., c = alpha * a * b + beta * c may be
+       * best possible implementation, e.g., c = alpha * a * b + beta * c may be
        * mapped to GEMM or definitely omits alpha*a in case of alpha=1, or similar
        * for special cases for beta=0 and beta=1.
        * However, to not rely on an ideal transformation a *manually specialized*
-       * expression is written for e.g., alpha=1 and beta=1 (c += a * b).
+       * expression is written for, e.g., alpha=1 and beta=1 (c += a * b).
        * NOTE: changing alpha or beta from above may not have an effect
        *       depending on what is selected below (expression).
        */

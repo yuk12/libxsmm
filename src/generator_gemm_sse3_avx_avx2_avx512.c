@@ -18,16 +18,6 @@
 #include "generator_gemm_avx512_microkernel.h"
 #include "libxsmm_main.h"
 
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
-
 LIBXSMM_API_INTERN void libxsmm_generator_gemm_sse3_avx_avx2_avx512_kernel( libxsmm_generated_code*        io_generated_code,
                                                                             const libxsmm_gemm_descriptor* i_xgemm_desc       ) {
   libxsmm_micro_kernel_config l_micro_kernel_config;
@@ -112,6 +102,7 @@ LIBXSMM_API_INTERN void libxsmm_generator_gemm_sse3_avx_avx2_avx512_kernel( libx
   l_gp_reg_mapping.gp_reg_nloop = LIBXSMM_X86_GP_REG_R11;
   l_gp_reg_mapping.gp_reg_kloop = LIBXSMM_X86_GP_REG_R12;
   l_gp_reg_mapping.gp_reg_help_1 = LIBXSMM_X86_GP_REG_R15;
+  l_gp_reg_mapping.gp_reg_help_2 = LIBXSMM_X86_GP_REG_RBX;
 
   /* define loop_label_tracker */
   libxsmm_reset_loop_label_tracker( &l_loop_label_tracker );
@@ -129,7 +120,7 @@ LIBXSMM_API_INTERN void libxsmm_generator_gemm_sse3_avx_avx2_avx512_kernel( libx
 #endif
     {
       const unsigned int init_m_blocking = libxsmm_generator_gemm_sse3_avx_avx2_avx512_get_initial_m_blocking( &l_micro_kernel_config, i_xgemm_desc, io_generated_code->arch );
-      const unsigned int init_m_blocks = (init_m_blocking + l_micro_kernel_config.vector_length - 1) / l_micro_kernel_config.vector_length;
+      const unsigned int init_m_blocks = LIBXSMM_UPDIV(init_m_blocking, l_micro_kernel_config.vector_length);
       while ((init_m_blocks * max_n_blocking + init_m_blocks + 1) > l_micro_kernel_config.vector_reg_count) {
         max_n_blocking--;
       }

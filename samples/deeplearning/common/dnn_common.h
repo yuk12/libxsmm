@@ -12,11 +12,6 @@
 #include <libxsmm.h>
 #include <libxsmm_intrinsics_x86.h>
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
-#include <float.h>
 #if defined(_OPENMP)
 # include <omp.h>
 #endif
@@ -161,6 +156,36 @@ LIBXSMM_INLINE void rne_mask_fp32_bf16(float* in, float* out, unsigned int len) 
   }
 }
 
+/* it's fine to alias in and out */
+LIBXSMM_INLINE void rne_mask_fp32_bfp16(float* in, float* out, unsigned int len) {
+  unsigned int i = 0;
+
+  /* rnaz buffer to bfp16 */
+  for ( i = 0; i < len; ++i ) {
+    unsigned int int_round = 0;
+    unsigned int do_round = 1;
+    const void *const ptr = &int_round;
+
+    int_round = *((unsigned int*)&(in[i]));
+
+    /* we don't round NaN and inf */
+    if ( (int_round & 0x7f800000) == 0x7f800000 ) {
+      do_round = 0;
+    }
+
+    /* perform round nearest tie even */
+    if ( do_round != 0 ) {
+      unsigned int fixup = (int_round >> 16) & 1;
+      int_round = int_round + 0x00007fff + fixup;
+    }
+
+    /* chop bits to create BFP16 in FP32 */
+    int_round = int_round & 0xffff0000;
+
+    out[i] = *((float*)ptr);
+  }
+}
+
 LIBXSMM_INLINE void zero_buf(float* buf, size_t size) {
   int i;
 #if defined(_OPENMP)
@@ -279,6 +304,80 @@ LIBXSMM_INLINE void init_buf(float* buf, size_t size, int initPos, int initOne)
 #endif
   for (i = 0; i < (int)size; ++i) {
     buf[i] = (float)((initOne != 0) ? 1.0 : ((initPos != 0) ? libxsmm_rng_f64() : (0.05 - libxsmm_rng_f64()/10.0)));
+  }
+}
+
+LIBXSMM_INLINE void init_buf_bf16(libxsmm_bfloat16* buf, size_t size, int initPos, int initOne)
+{
+  int i;
+  zero_buf_bf16(buf, size);
+#if defined(_OPENMP)
+# pragma omp parallel for private(i)
+#endif
+  for (i = 0; i < (int)size; ++i) {
+    libxsmm_bfloat16_hp tmp;
+    tmp.f = (float)((initOne != 0) ? 1.0 : ((initPos != 0) ? libxsmm_rng_f64() : (0.05 - libxsmm_rng_f64()/10.0)));
+    buf[i] = tmp.i[1];
+  }
+}
+
+LIBXSMM_INLINE void libxsmm_dnn_dequantize_int8( char* in_buffer, float* out_buffer, int length, unsigned char scf ) {
+  const float val_exp = libxsmm_sexp2_i8i(-scf);
+  int i = 0;
+#ifdef _OPENMP
+# pragma omp parallel for private(i)
+#endif
+  for ( i = 0; i < length; ++i ) {
+    out_buffer[i] = ((float)in_buffer[i])*val_exp;
+  }
+}
+
+LIBXSMM_INLINE float libxsmm_internal_get_max_common( float* in_buffer, int length ) {
+  float absmax_value = LIBXSMM_ABS(in_buffer[0]);
+  int i = 0;
+  for (i = 1; i < length; ++i ) {
+    if (LIBXSMM_ABS(in_buffer[i]) > absmax_value) {
+      absmax_value = LIBXSMM_ABS(in_buffer[i]);
+    }
+  }
+  return absmax_value;
+}
+
+LIBXSMM_INLINE void quantize_buffer_char(float *in_buffer, char *out_buffer, int size, unsigned char add_shift, unsigned char* scf) {
+  int i;
+  const float max_value = libxsmm_internal_get_max_common(in_buffer, size);
+  int maxexp = 0;
+  /* take return value of LIBXSMM_FREXPF to mute static analysis issue */
+  float scfq = LIBXSMM_FREXPF(max_value, &maxexp);
+  maxexp -= (7 - add_shift);
+  scfq = libxsmm_sexp2_i8i(-maxexp);
+  for (i=0; i<size; i++) {
+    out_buffer[i] = (char)LIBXSMM_ROUNDF(in_buffer[i]*scfq);
+  }
+  *scf = (unsigned char)(-maxexp);
+}
+
+LIBXSMM_INLINE void quantize_buffer_uchar(float *in_buffer, unsigned char *out_buffer, int size, unsigned char add_shift, unsigned char* scf) {
+  int i;
+  const float max_value = libxsmm_internal_get_max_common(in_buffer, size);
+  int maxexp = 0;
+  /* take return value of LIBXSMM_FREXPF to mute static analysis issue */
+  float scfq = LIBXSMM_FREXPF(max_value, &maxexp);
+  maxexp -= (7 - add_shift);
+  scfq = libxsmm_sexp2_i8i(-maxexp);
+  for (i=0; i<size; i++) {
+    out_buffer[i] = (unsigned char)LIBXSMM_ROUNDF(in_buffer[i]*scfq);
+  }
+  *scf = (unsigned char)(-maxexp);
+}
+
+LIBXSMM_INLINE void init_buf_range(float* buf, size_t size, float low, float high)
+{
+  int i;
+  float range = high - low;
+  zero_buf(buf, size);
+  for (i = 0; i < (int)size; ++i) {
+    buf[i] = (((float)rand())/RAND_MAX)*range+low;
   }
 }
 
@@ -1764,6 +1863,100 @@ LIBXSMM_INLINE void naive_fullyconnected_bp(naive_fullyconnected_t* param, float
   }
 }
 
+LIBXSMM_INLINE void naive_fullyconnected_fused_fp(naive_fullyconnected_t* param, const float* input_ptr, float* output_ptr, const float* filter_ptr, const float* bias_ptr)
+{
+  const int nImg = param->N;
+  const int nIFm = param->C;
+  const int nOFm = param->K;
+
+  int img, ifm, ofm;
+
+  LIBXSMM_VLA_DECL(2, const float, input,  input_ptr,  nIFm);
+  LIBXSMM_VLA_DECL(2, const float, filter, filter_ptr, nIFm);
+  LIBXSMM_VLA_DECL(2,       float, output, output_ptr, nOFm);
+
+#if defined(_OPENMP)
+  LIBXSMM_OMP_VAR(img); LIBXSMM_OMP_VAR(ifm); LIBXSMM_OMP_VAR(ofm);
+# pragma omp parallel for private(img, ofm, ifm)
+#endif
+  for (ofm = 0; ofm < nOFm; ++ofm) {
+    for(img = 0; img < nImg; ++img) {
+      LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) = (float)0;
+      for (ifm = 0; ifm < nIFm; ++ifm) {
+        LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) +=
+          LIBXSMM_VLA_ACCESS(2, filter, ofm, ifm, nIFm) * LIBXSMM_VLA_ACCESS(2, input, img, ifm, nIFm);
+      }
+      if ( param->fuse_type == 1 ) {
+        LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) += bias_ptr[ofm];
+      } else if ( param->fuse_type == 2 ) {
+        LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) = ( LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) > 0 ) ? LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) : 0;
+      } else if ( param->fuse_type == 3 ) {
+        LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) = ((float)tanh((double)LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm)/2.0)+1.0f)/2.0f;
+      } else if ( param->fuse_type == 4 ) {
+        LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) += bias_ptr[ofm];
+        LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) = ( LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) > 0 ) ? LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) : 0;
+      } else if ( param->fuse_type == 5 ) {
+        LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) += bias_ptr[ofm];
+        LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) = ((float)tanh((double)LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm)/2.0)+1.0f)/2.0f;
+      }
+    }
+  }
+}
+
+LIBXSMM_INLINE void naive_fullyconnected_fused_bp(naive_fullyconnected_t* param, float* delinput_ptr, float* deloutput_ptr, const float* filter_ptr, float* delbias_ptr, const float* output_ptr)
+{
+  const int nImg = param->N;
+  const int nIFm = param->C;
+  const int nOFm = param->K;
+
+  int img, ifm, ofm;
+
+  LIBXSMM_VLA_DECL(2,       float,  dinput,  delinput_ptr, nIFm);
+  LIBXSMM_VLA_DECL(2, const float,  filter,    filter_ptr, nIFm);
+  LIBXSMM_VLA_DECL(2,       float, doutput, deloutput_ptr, nOFm);
+  LIBXSMM_VLA_DECL(2, const float,  output,    output_ptr, nOFm);
+
+  if ( param->fuse_type != 0 ) {
+#if defined(_OPENMP)
+    LIBXSMM_OMP_VAR(img); LIBXSMM_OMP_VAR(ofm);
+# pragma omp parallel for private(img, ofm)
+#endif
+    for (ofm = 0; ofm < nOFm; ++ofm) {
+      float dbias = 0.0f;
+      for(img = 0; img < nImg; ++img) {
+        if ( param->fuse_type == 1 ) {
+          dbias += LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm);
+        } else if ( param->fuse_type == 2 ) {
+          LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm) = ( LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) > 0 ) ? LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm) : 0;
+        } else if ( param->fuse_type == 3 ) {
+          LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm) = LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm)*(1.0f-LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm));
+        } else if ( param->fuse_type == 4 ) {
+          LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm) = ( LIBXSMM_VLA_ACCESS(2, output, img, ofm, nOFm) > 0 ) ? LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm) : 0;
+          dbias += LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm);
+        } else if ( param->fuse_type == 5 ) {
+          LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm) = LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm)*(1.0f-LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm));
+          dbias += LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm);
+        }
+      }
+      delbias_ptr[ofm] = dbias;
+    }
+  }
+
+#if defined(_OPENMP)
+  LIBXSMM_OMP_VAR(img); LIBXSMM_OMP_VAR(ofm); LIBXSMM_OMP_VAR(ifm);
+# pragma omp parallel for private(img, ofm, ifm)
+#endif
+  for (ifm = 0; ifm < nIFm; ++ifm) {
+    for(img = 0; img < nImg; ++img) {
+      LIBXSMM_VLA_ACCESS(2, dinput, img, ifm, nIFm) = (float)0;
+      for (ofm = 0; ofm < nOFm; ++ofm) {
+        LIBXSMM_VLA_ACCESS(2, dinput, img, ifm, nIFm) +=
+          LIBXSMM_VLA_ACCESS(2, filter, ofm, ifm, nIFm) * LIBXSMM_VLA_ACCESS(2, doutput, img, ofm, nOFm);
+      }
+    }
+  }
+}
+
 LIBXSMM_INLINE void naive_fullyconnected_wu(naive_fullyconnected_t* param, const float* input_ptr, const float* deloutput_ptr, float* delfilter_ptr)
 {
   const int nImg = param->N;
@@ -2238,12 +2431,13 @@ LIBXSMM_INLINE void naive_fusedgroupnorm_bp(naive_fusedgroupnorm_t* param, const
   LIBXSMM_VLA_DECL(5,       float, dinput,     dinput_ptr,     nG,  nFMG, ifh, ifw);
   /*LIBXSMM_VLA_DECL(5, const float, output,     output_ptr,     nG,  nFMG, ofh, ofw);*/
   LIBXSMM_VLA_DECL(5,       float, doutput,    doutput_ptr,    nG,  nFMG, ofh, ofw);
-  LIBXSMM_UNUSED(beta_ptr);
 
   LIBXSMM_VLA_DECL(4, const float, input_gb,      input_ptr,      nFm,  ifh, ifw);
   LIBXSMM_VLA_DECL(4, const float, output_gb,     output_ptr,     nFm,  ofh, ofw);
   LIBXSMM_VLA_DECL(4,       float, doutput_gb,    doutput_ptr,    nFm,  ofh, ofw);
   LIBXSMM_VLA_DECL(4,       float, dinput_add,    dinput_add_ptr, nFm, ifh, ifw);
+
+  LIBXSMM_UNUSED(beta_ptr);
 
 #if defined(_OPENMP)
   LIBXSMM_OMP_VAR(hi); LIBXSMM_OMP_VAR(wi); LIBXSMM_OMP_VAR(ho); LIBXSMM_OMP_VAR(wo); LIBXSMM_OMP_VAR(g);
@@ -2292,8 +2486,8 @@ LIBXSMM_INLINE void naive_fusedgroupnorm_bp(naive_fusedgroupnorm_t* param, const
             const float  input_val      =  LIBXSMM_VLA_ACCESS(5,      input, img, g, fmg, hi, wi, nG, nFMG, ifh, ifw);
             const float  del_output_val =  LIBXSMM_VLA_ACCESS(5,    doutput, img, g, fmg, ho, wo, nG, nFMG, ofh, ofw);
 
-            d1_val += del_output_val * (input_val - expectval_ptr[img*nG+g]);
-            d2_val += del_output_val;
+            d1_val += del_output_val * (input_val - expectval_ptr[img*nG+g]) * gamma_ptr[g*nFMG+fmg];
+            d2_val += del_output_val * gamma_ptr[g*nFMG+fmg];
           }
         }
       }
@@ -2305,8 +2499,8 @@ LIBXSMM_INLINE void naive_fusedgroupnorm_bp(naive_fusedgroupnorm_t* param, const
             const float  del_output_val =  LIBXSMM_VLA_ACCESS(5,    doutput, img, g, fmg, ho, wo, nG, nFMG, ofh, ofw);
                   float* del_input_ptr  = &LIBXSMM_VLA_ACCESS(5,     dinput, img, g, fmg, hi, wi, nG, nFMG, ifh, ifw);
 
-            float t0_val = gamma_ptr[g*nFMG+fmg] * rcpstddev_ptr[img*nG+g] * recp_ghw;
-            *del_input_ptr = t0_val * ((ghw * del_output_val) - d2_val - ((input_val - expectval_ptr[img*nG+g]) * d1_val * (1.0f/(variance_ptr[img*nG+g]+eps))));
+            float t0_val = rcpstddev_ptr[img*nG+g] * recp_ghw;
+            *del_input_ptr = t0_val * ((gamma_ptr[g*nFMG+fmg] * ghw * del_output_val) - d2_val - ((input_val - expectval_ptr[img*nG+g]) * d1_val * (1.0f/(variance_ptr[img*nG+g]+eps))));
           }
         }
       }
@@ -2375,13 +2569,13 @@ LIBXSMM_INLINE void lstm_fwd_eltwise_merged(int N, int K, float *i, float *c, fl
       cov = LIBXSMM_INTRINSICS_MM512_TANH_PS (csv);
       /* h = o.co */
       hv = _mm512_mul_ps (ov, cov);
-      _mm512_store_ps (&(i[j*4*K + l]), iv);
-      _mm512_store_ps (&(c[j*4*K + l]), cv);
-      _mm512_store_ps (&(f[j*4*K + l]), fv);
-      _mm512_store_ps (&(o[j*4*K + l]), ov);
-      _mm512_store_ps (&(cs[j*K + l]),  csv);
-      _mm512_store_ps (&(co[j*K + l]),  cov);
-      _mm512_store_ps (&(h[j*K + l]),   hv);
+      _mm512_storeu_ps (&(i[j*4*K + l]), iv);
+      _mm512_storeu_ps (&(c[j*4*K + l]), cv);
+      _mm512_storeu_ps (&(f[j*4*K + l]), fv);
+      _mm512_storeu_ps (&(o[j*4*K + l]), ov);
+      _mm512_storeu_ps (&(cs[j*K + l]),  csv);
+      _mm512_storeu_ps (&(co[j*K + l]),  cov);
+      _mm512_storeu_ps (&(h[j*K + l]),   hv);
     }
   }
 #if defined(_OPENMP)
@@ -2500,11 +2694,11 @@ LIBXSMM_INLINE void lstm_bwd_upd_eltwise_merged(int N, int K, float *i, float *c
       /* update dcsp */
       /* dcsp = dcsp.f */
       dcspv = _mm512_mul_ps (dcspv, fv);
-      _mm512_store_ps (&(di[j*4*K + l]), div);
-      _mm512_store_ps (&(dc[j*4*K + l]), dcv);
-      _mm512_store_ps (&(df[j*4*K + l]), dfv);
-      _mm512_store_ps (&(dp[j*4*K + l]), dov);
-      _mm512_store_ps (&(dcsp[j*K + l]), dcspv);
+      _mm512_storeu_ps (&(di[j*4*K + l]), div);
+      _mm512_storeu_ps (&(dc[j*4*K + l]), dcv);
+      _mm512_storeu_ps (&(df[j*4*K + l]), dfv);
+      _mm512_storeu_ps (&(dp[j*4*K + l]), dov);
+      _mm512_storeu_ps (&(dcsp[j*K + l]), dcspv);
     }
   }
 #if defined(_OPENMP)
@@ -2563,7 +2757,7 @@ LIBXSMM_INLINE void lstm_bwd_upd_eltwise_merged(int N, int K, float *i, float *c
 #endif
 }
 
-void lstm_ref_fwd( int N, int C, int K, int t, float forget_bias,
+LIBXSMM_INLINE void lstm_ref_fwd( int N, int C, int K, int t, float forget_bias,
                    float *wigold, float *wcgold, float *wfgold, float *wogold,
                    float *rigold, float *rcgold, float *rfgold, float *rogold,
                    float *bigold, float *bcgold, float *bfgold, float *bogold,
@@ -2675,7 +2869,7 @@ void lstm_ref_fwd( int N, int C, int K, int t, float forget_bias,
   }
 }
 
-void lstm_ref_bwd_upd( int N, int C, int K, int t,
+LIBXSMM_INLINE void lstm_ref_bwd_upd( int N, int C, int K, int t,
                        float *xgoldt, float *cspgold, float *hpgold,
                        float *csgoldt, float *cogoldt, float *hgoldt,
                        float *icfogoldt, float *wgold, float *rgold,
@@ -2800,7 +2994,7 @@ void lstm_ref_bwd_upd( int N, int C, int K, int t,
   }
 }
 
-void gru_ref_fwd( int N, int C, int K, int t,
+LIBXSMM_INLINE void gru_ref_fwd( int N, int C, int K, int t,
                   float *wi, float *wc, float *wf,
                   float *ri, float *rc, float *rf,
                   float *bi, float *bc, float *bf,
@@ -2867,7 +3061,7 @@ void gru_ref_fwd( int N, int C, int K, int t,
   }
 }
 
-void gru_ref_bwd_upd( int N, int C, int K, int t,
+LIBXSMM_INLINE void gru_ref_bwd_upd( int N, int C, int K, int t,
                       float *xt,  float *hpD,  float *ht,
                       float *it,  float *ct,   float *ft, float *ot,
                       float *wi,  float *wc,   float *wf,

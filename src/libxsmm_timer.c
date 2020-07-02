@@ -9,7 +9,6 @@
 /* Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm_timer.h>
-#include <libxsmm_intrinsics_x86.h>
 #include "libxsmm_main.h"
 
 #if defined(LIBXSMM_OFFLOAD_TARGET)
@@ -109,6 +108,46 @@ libxsmm_timer_tickint libxsmm_timer_tick_tsc(void)
 }
 
 
+LIBXSMM_API int libxsmm_get_timer_info(libxsmm_timer_info* info)
+{
+  int result;
+  if (NULL != info) {
+#if defined(LIBXSMM_TIMER_RDTSC)
+    if (0 < libxsmm_timer_scale) {
+      info->tsc = 1;
+    }
+# if !defined(LIBXSMM_INIT_COMPLETED)
+    else if (2 > libxsmm_ninit) {
+      libxsmm_init();
+      if (0 < libxsmm_timer_scale) {
+        info->tsc = 1;
+      }
+      else {
+        info->tsc = 0;
+      }
+    }
+# endif
+    else {
+      info->tsc = 0;
+    }
+#else
+    info->tsc = 0;
+#endif
+    result = EXIT_SUCCESS;
+  }
+  else {
+    static int error_once = 0;
+    if (0 != libxsmm_verbosity /* library code is expected to be mute */
+      && 1 == LIBXSMM_ATOMIC_ADD_FETCH(&error_once, 1, LIBXSMM_ATOMIC_RELAXED))
+    {
+      fprintf(stderr, "LIBXSMM ERROR: invalid argument for libxsmm_get_timer_info specified!\n");
+    }
+    result = EXIT_FAILURE;
+  }
+  return result;
+}
+
+
 LIBXSMM_API libxsmm_timer_tickint libxsmm_timer_tick(void)
 {
   libxsmm_timer_tickint result;
@@ -117,7 +156,7 @@ LIBXSMM_API libxsmm_timer_tickint libxsmm_timer_tick(void)
     LIBXSMM_TIMER_RDTSC(result);
   }
 # if !defined(LIBXSMM_INIT_COMPLETED)
-  else if (0 == libxsmm_ninit) {
+  else if (2 > libxsmm_ninit) {
     libxsmm_init();
     if (0 < libxsmm_timer_scale) {
       LIBXSMM_TIMER_RDTSC(result);

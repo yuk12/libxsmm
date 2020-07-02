@@ -8,18 +8,8 @@
 ******************************************************************************/
 /* Alexander Heinecke, Hans Pabst (Intel Corp.)
 ******************************************************************************/
-
 #include "libxsmm_rng.h"
 #include "libxsmm_main.h"
-#include <libxsmm_intrinsics_x86.h>
-
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <stdlib.h>
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
 
 #if !defined(LIBXSMM_RNG_DRAND48) && (!defined(_WIN32) && !defined(__CYGWIN__) && (defined(_SVID_SOURCE) || defined(_XOPEN_SOURCE)))
 # define LIBXSMM_RNG_DRAND48
@@ -31,12 +21,12 @@
 
 /* dispatched RNG functions (separate typedef for legacy Cray C++ needed) */
 typedef void (*internal_rng_f32_seq_fn)(float*, libxsmm_blasint);
-LIBXSMM_APIVAR(internal_rng_f32_seq_fn internal_rng_f32_seq);
+LIBXSMM_APIVAR_DEFINE(internal_rng_f32_seq_fn internal_rng_f32_seq);
 /* 2048-bit state for RNG */
-LIBXSMM_APIVAR_ARRAY(unsigned int internal_rng_state0, 16);
-LIBXSMM_APIVAR_ARRAY(unsigned int internal_rng_state1, 16);
-LIBXSMM_APIVAR_ARRAY(unsigned int internal_rng_state2, 16);
-LIBXSMM_APIVAR_ARRAY(unsigned int internal_rng_state3, 16);
+LIBXSMM_APIVAR_DEFINE(unsigned int internal_rng_state0[16]);
+LIBXSMM_APIVAR_DEFINE(unsigned int internal_rng_state1[16]);
+LIBXSMM_APIVAR_DEFINE(unsigned int internal_rng_state2[16]);
+LIBXSMM_APIVAR_DEFINE(unsigned int internal_rng_state3[16]);
 
 
 LIBXSMM_API_INLINE void internal_rng_float_jump(uint32_t* state0, uint32_t* state1, uint32_t* state2, uint32_t* state3)
@@ -181,6 +171,43 @@ void internal_rng_f32_seq_avx512(float* rngs, libxsmm_blasint count)
 #endif /*defined(LIBXSMM_INTRINSICS_AVX512)*/
 
 
+LIBXSMM_API unsigned int* libxsmm_rng_create_avx512_extstate(unsigned int/*uint32_t*/ seed)
+{
+  unsigned int* state = (unsigned int*) libxsmm_aligned_malloc( 64*sizeof(unsigned int), 64 );
+  static const uint32_t temp_state[] = {
+     31,  30,  29,  28,  27,  26,  25,  24,  23,  22,  21,  20,  19,  18,  17,  16,
+    131, 130, 129, 128, 127, 126, 125, 124, 123, 122, 121, 120, 119, 118, 117, 116,
+    231, 230, 229, 228, 227, 226, 225, 224, 223, 222, 221, 220, 219, 218, 217, 216,
+    331, 330, 329, 328, 327, 326, 325, 324, 323, 322, 321, 320, 319, 318, 317, 316
+  };
+  libxsmm_blasint i;
+
+  /* finish initializing the state */
+  LIBXSMM_ASSERT((16 * 4) == sizeof(temp_state) / sizeof(*temp_state));
+  for (i = 0; i < 16; ++i) {
+    state[i   ] = seed + temp_state[i];
+    state[i+16] = seed + temp_state[i+16];
+    state[i+32] = seed + temp_state[i+32];
+    state[i+48] = seed + temp_state[i+48];
+  }
+  for (i = 0; i < 16; ++i) {
+    internal_rng_float_jump( /* progress each sequence by 2^64 */
+      state +      i, state + 16 + i,
+      state + 32 + i, state + 48 + i);
+  }
+
+  return state;
+}
+
+
+LIBXSMM_API void libxsmm_rng_destroy_avx512_extstate(unsigned int* stateptr)
+{
+  if ( stateptr != NULL ) {
+    libxsmm_free( stateptr );
+  }
+}
+
+
 LIBXSMM_API void libxsmm_rng_set_seed(unsigned int/*uint32_t*/ seed)
 {
   LIBXSMM_INIT
@@ -216,7 +243,6 @@ LIBXSMM_API void libxsmm_rng_f32_seq(float* rngs, libxsmm_blasint count)
 # if defined(LIBXSMM_INTRINSICS_AVX512) /* __AVX512F__ */
   if ((LIBXSMM_RNG_SIMD_MIN << 4) <= count) { /* SIMD code path */
     internal_rng_f32_seq(rngs, count); /* pointer based function call */
-    return;
   }
   else /* scalar code path */
 # endif
@@ -249,9 +275,10 @@ LIBXSMM_API unsigned int libxsmm_rng_u32(unsigned int n)
 }
 
 
-LIBXSMM_API void libxsmm_rng_seq(void* data, libxsmm_blasint count)
+LIBXSMM_API void libxsmm_rng_seq(void* data, libxsmm_blasint nbytes)
 {
-  unsigned char* dst = (unsigned char*)data, *end = dst + (count & 0xFFFFFFFFFFFFFFFC);
+  unsigned char* dst = (unsigned char*)data;
+  unsigned char* end = dst + (nbytes & 0xFFFFFFFFFFFFFFFC);
   unsigned int r;
   for (; dst < end; dst += 4) {
 #if defined(LIBXSMM_RNG_DRAND48)
@@ -262,7 +289,7 @@ LIBXSMM_API void libxsmm_rng_seq(void* data, libxsmm_blasint count)
 #endif
     LIBXSMM_MEMCPY127(dst, &r, 4);
   }
-  end = (unsigned char*)data + count;
+  end = (unsigned char*)data + nbytes;
   if (dst < end) {
 #if defined(LIBXSMM_RNG_DRAND48)
     r = (unsigned int)lrand48();

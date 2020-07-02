@@ -11,17 +11,6 @@
 #include "generator_common.h"
 #include "libxsmm_main.h"
 
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-#include <stdio.h>
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
-
 #if !defined(GENERATOR_COMMON_MAX_ERROR_LENGTH)
 # define GENERATOR_COMMON_MAX_ERROR_LENGTH 511
 #endif
@@ -113,7 +102,7 @@ void libxsmm_close_function( libxsmm_generated_code* io_generated_code ) {
 }
 
 LIBXSMM_API_INTERN
-unsigned int libxsmm_check_x86_gp_reg_name_callee_save( const unsigned int i_gp_reg_number ) {
+unsigned int libxsmm_check_x86_gp_reg_callee_save( const unsigned int i_gp_reg_number ) {
   if ( (i_gp_reg_number == LIBXSMM_X86_GP_REG_RBX) ||
        (i_gp_reg_number == LIBXSMM_X86_GP_REG_RBP) ||
        (i_gp_reg_number == LIBXSMM_X86_GP_REG_R12) ||
@@ -508,6 +497,45 @@ void libxsmm_get_x86_instr_name( const unsigned int i_instr_number,
       break;
     case LIBXSMM_X86_INSTR_VMOVNTDQ:
       libxsmm_strncpy(o_instr_name, "vmovntdq", i_instr_name_max_length, 8 );
+      break;
+    /* CPUID: AMX-TILE INTERCEPT: SPR */
+    case LIBXSMM_X86_INSTR_LDTILECFG:
+      libxsmm_strncpy(o_instr_name, "ldtilecfg", i_instr_name_max_length, 9 );
+      break;
+    case LIBXSMM_X86_INSTR_STTILECFG:
+      libxsmm_strncpy(o_instr_name, "sttilecfg", i_instr_name_max_length, 9 );
+      break;
+    case LIBXSMM_X86_INSTR_TILERELEASE:
+      libxsmm_strncpy(o_instr_name, "tilerelease", i_instr_name_max_length, 11 );
+      break;
+    case LIBXSMM_X86_INSTR_TILELOADD:
+      libxsmm_strncpy(o_instr_name, "tileloadd", i_instr_name_max_length, 9 );
+      break;
+    case LIBXSMM_X86_INSTR_TILELOADDT1:
+      libxsmm_strncpy(o_instr_name, "tileloaddt1", i_instr_name_max_length, 11 );
+      break;
+    case LIBXSMM_X86_INSTR_TILESTORED:
+      libxsmm_strncpy(o_instr_name, "tilestored", i_instr_name_max_length, 10 );
+      break;
+    case LIBXSMM_X86_INSTR_TILEZERO:
+      libxsmm_strncpy(o_instr_name, "tilezero", i_instr_name_max_length, 8 );
+      break;
+    /* CPUID: AMX-INT8 INTERCEPT: SPR */
+    case LIBXSMM_X86_INSTR_TDPBSSD:
+      libxsmm_strncpy(o_instr_name, "tdpbssd", i_instr_name_max_length, 7 );
+      break;
+    case LIBXSMM_X86_INSTR_TDPBSUD:
+      libxsmm_strncpy(o_instr_name, "tdpbsud", i_instr_name_max_length, 7 );
+      break;
+    case LIBXSMM_X86_INSTR_TDPBUSD:
+      libxsmm_strncpy(o_instr_name, "tdpbusd", i_instr_name_max_length, 7 );
+      break;
+    case LIBXSMM_X86_INSTR_TDPBUUD:
+      libxsmm_strncpy(o_instr_name, "tdpbuud", i_instr_name_max_length, 7 );
+      break;
+    /* CPUID: AMX-BF16 INTERCEPT: SPR */
+    case LIBXSMM_X86_INSTR_TDPBF16PS:
+      libxsmm_strncpy(o_instr_name, "tdpbf16ps", i_instr_name_max_length, 9 );
       break;
     /* default, we didn't had a match */
     default:
@@ -961,26 +989,6 @@ const char* libxsmm_strerror(unsigned int i_error_code) {
       LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
         "there is no QFMA instruction set extension available (error #%u)!", i_error_code );
       break;
-    case LIBXSMM_ERR_CALLEE_SAVE_A:
-      LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
-        "reg_a cannot be callee save, since input, please use either rdi, rsi, rdx, rcx, r8, r9 for this value (error #%u)!", i_error_code );
-      break;
-    case LIBXSMM_ERR_CALLEE_SAVE_B:
-      LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
-        "reg_b cannot be callee save, since input, please use either rdi, rsi, rdx, rcx, r8, r9 for this value (error #%u)!", i_error_code );
-      break;
-    case LIBXSMM_ERR_CALLEE_SAVE_C:
-      LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
-        "reg_c cannot be callee save, since input, please use either rdi, rsi, rdx, rcx, r8, r9 for this value (error #%u)!", i_error_code );
-      break;
-    case LIBXSMM_ERR_CALLEE_SAVE_A_PREF:
-      LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
-        "reg_a_prefetch cannot be callee save, since input, please use either rdi, rsi, rdx, rcx, r8, r9 for this value (error #%u)!", i_error_code );
-      break;
-    case LIBXSMM_ERR_CALLEE_SAVE_B_PREF:
-      LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
-        "reg_b_prefetch cannot be callee save, since input, please use either rdi, rsi, rdx, rcx, r8, r9 for this value (error #%u)!", i_error_code );
-      break;
     case LIBXSMM_ERR_NO_INDEX_SCALE_ADDR:
       LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
         "Index + Scale addressing mode is currently not implemented (error #%u)!", i_error_code );
@@ -1057,11 +1065,23 @@ const char* libxsmm_strerror(unsigned int i_error_code) {
       LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
         "ldb needs to be greater than or equal to n (error #%u)!", i_error_code );
       break;
+    case LIBXSMM_ERR_VNNI_A:
+      LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
+        "A is not provided in supported VNNI format (error #%u)!", i_error_code );
+      break;
+    case LIBXSMM_ERR_VNNI_B:
+      LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
+        "B is not provided in supported VNNI format (error #%u)!", i_error_code );
+      break;
+    case LIBXSMM_ERR_NO_AVX512VL:
+      LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
+        "the AVX512VL instruction set extension is currently not available (error #%u)!", i_error_code );
+      break;
     default: /* we do not know what happened */
       LIBXSMM_SNPRINTF( error_message, GENERATOR_COMMON_MAX_ERROR_LENGTH,
         "an unknown error occurred (error #%u)!", i_error_code );
       break;
-  }
+    }
 
   return error_message;
 }
@@ -1117,5 +1137,323 @@ LIBXSMM_API_INTERN unsigned int libxsmm_compute_equalized_blocking(
   *o_block_2 = l_n2;
 
   return l_ret;
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_comp_redu_flags libxsmm_get_meltw_comp_redu_flags( libxsmm_meltw_redu_flags flags )
+{
+  switch ( flags ) {
+    case LIBXSMM_MELTW_FLAG_REDUCE_NONE:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_NONE;
+    case LIBXSMM_MELTW_FLAG_REDUCE_OP_ADD:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD;
+    case LIBXSMM_MELTW_FLAG_REDUCE_OP_MAX:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_MAX;
+    case LIBXSMM_MELTW_FLAG_REDUCE_OP_MUL:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_MUL;
+    case LIBXSMM_MELTW_FLAG_REDUCE_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_ROWS;
+    case LIBXSMM_MELTW_FLAG_REDUCE_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_COLS;
+    case LIBXSMM_MELTW_FLAG_REDUCE_ELTS:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_ELTS;
+    case LIBXSMM_MELTW_FLAG_REDUCE_ELTS_SQUARED:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_ELTS_SQUARED;
+    case LIBXSMM_MELTW_FLAG_REDUCE_OP_ADD_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_ROWS;
+    case LIBXSMM_MELTW_FLAG_REDUCE_OP_ADD_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_COLS;
+    default:
+      return LIBXSMM_MELTW_COMP_FLAG_REDUCE_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_redu_flags libxsmm_get_meltw_redu_flags( libxsmm_meltw_comp_redu_flags flags )
+{
+  switch ( flags ) {
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_NONE:
+      return LIBXSMM_MELTW_FLAG_REDUCE_NONE;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD:
+      return LIBXSMM_MELTW_FLAG_REDUCE_OP_ADD;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_MAX:
+      return LIBXSMM_MELTW_FLAG_REDUCE_OP_MAX;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_MUL:
+      return LIBXSMM_MELTW_FLAG_REDUCE_OP_MUL;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_ROWS:
+      return LIBXSMM_MELTW_FLAG_REDUCE_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_COLS:
+      return LIBXSMM_MELTW_FLAG_REDUCE_COLS;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_ELTS:
+      return LIBXSMM_MELTW_FLAG_REDUCE_ELTS;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_ELTS_SQUARED:
+      return LIBXSMM_MELTW_FLAG_REDUCE_ELTS_SQUARED;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_ROWS:
+      return LIBXSMM_MELTW_FLAG_REDUCE_OP_ADD_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_COLS:
+      return LIBXSMM_MELTW_FLAG_REDUCE_OP_ADD_COLS;
+    default:
+      return LIBXSMM_MELTW_FLAG_REDUCE_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_comp_scal_flags libxsmm_get_meltw_comp_scal_flags( libxsmm_meltw_scal_flags flags )
+{
+  switch( flags ) {
+    case LIBXSMM_MELTW_FLAG_SCALE_NONE:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_NONE;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT;
+    case LIBXSMM_MELTW_FLAG_SCALE_SHIFT:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_SHIFT;
+    case LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS;
+    case LIBXSMM_MELTW_FLAG_SCALE_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_ROWS;
+    case LIBXSMM_MELTW_FLAG_SCALE_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_COLS;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_ROWS;
+    case LIBXSMM_MELTW_FLAG_SCALE_SHIFT_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_SHIFT_ROWS;
+    case LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS_ROWS;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT_SHIFT_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_SHIFT_ROWS;
+    case LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS_SHIFT_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS_SHIFT_ROWS;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT_ADD_BIAS_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_ADD_BIAS_ROWS;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT_SHIFT_ADD_BIAS_ROWS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_SHIFT_ADD_BIAS_ROWS;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_COLS;
+    case LIBXSMM_MELTW_FLAG_SCALE_SHIFT_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_SHIFT_COLS;
+    case LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS_COLS;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT_SHIFT_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_SHIFT_COLS;
+    case LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS_SHIFT_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS_SHIFT_COLS;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT_ADD_BIAS_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_ADD_BIAS_COLS;
+    case LIBXSMM_MELTW_FLAG_SCALE_MULT_SHIFT_ADD_BIAS_COLS:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_SHIFT_ADD_BIAS_COLS;
+    default:
+      return LIBXSMM_MELTW_COMP_FLAG_SCALE_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_scal_flags libxsmm_get_meltw_scal_flags( libxsmm_meltw_comp_scal_flags flags )
+{
+  switch( flags ) {
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_NONE:
+      return LIBXSMM_MELTW_FLAG_SCALE_NONE;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_SHIFT:
+      return LIBXSMM_MELTW_FLAG_SCALE_SHIFT;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS:
+      return LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_ROWS:
+      return LIBXSMM_MELTW_FLAG_SCALE_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_COLS:
+      return LIBXSMM_MELTW_FLAG_SCALE_COLS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_ROWS:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_SHIFT_ROWS:
+      return LIBXSMM_MELTW_FLAG_SCALE_SHIFT_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS_ROWS:
+      return LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_SHIFT_ROWS:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT_SHIFT_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS_SHIFT_ROWS:
+      return LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS_SHIFT_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_ADD_BIAS_ROWS:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT_ADD_BIAS_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_SHIFT_ADD_BIAS_ROWS:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT_SHIFT_ADD_BIAS_ROWS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_COLS:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT_COLS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_SHIFT_COLS:
+      return LIBXSMM_MELTW_FLAG_SCALE_SHIFT_COLS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS_COLS:
+      return LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS_COLS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_SHIFT_COLS:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT_SHIFT_COLS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_ADD_BIAS_SHIFT_COLS:
+      return LIBXSMM_MELTW_FLAG_SCALE_ADD_BIAS_SHIFT_COLS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_ADD_BIAS_COLS:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT_ADD_BIAS_COLS;
+    case LIBXSMM_MELTW_COMP_FLAG_SCALE_MULT_SHIFT_ADD_BIAS_COLS:
+      return LIBXSMM_MELTW_FLAG_SCALE_MULT_SHIFT_ADD_BIAS_COLS;
+    default:
+      return LIBXSMM_MELTW_FLAG_SCALE_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_comp_cvta_flags libxsmm_get_meltw_comp_cvta_flags( libxsmm_meltw_cvta_flags flags )
+{
+  switch ( flags ) {
+    case LIBXSMM_MELTW_FLAG_CVTA_NONE:
+      return LIBXSMM_MELTW_COMP_FLAG_CVTA_NONE;
+    case LIBXSMM_MELTW_FLAG_CVTA_FUSE_RELU:
+      return LIBXSMM_MELTW_COMP_FLAG_CVTA_FUSE_RELU;
+    case LIBXSMM_MELTW_FLAG_CVTA_FUSE_TANH:
+      return LIBXSMM_MELTW_COMP_FLAG_CVTA_FUSE_TANH;
+    case LIBXSMM_MELTW_FLAG_CVTA_FUSE_SIGM:
+      return LIBXSMM_MELTW_COMP_FLAG_CVTA_FUSE_SIGM;
+    default:
+      return LIBXSMM_MELTW_COMP_FLAG_CVTA_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_cvta_flags libxsmm_get_meltw_cvta_flags( libxsmm_meltw_comp_cvta_flags flags )
+{
+  switch ( flags ) {
+    case LIBXSMM_MELTW_COMP_FLAG_CVTA_NONE:
+      return LIBXSMM_MELTW_FLAG_CVTA_NONE;
+    case LIBXSMM_MELTW_COMP_FLAG_CVTA_FUSE_RELU:
+      return LIBXSMM_MELTW_FLAG_CVTA_FUSE_RELU;
+    case LIBXSMM_MELTW_COMP_FLAG_CVTA_FUSE_TANH:
+      return LIBXSMM_MELTW_FLAG_CVTA_FUSE_TANH;
+    case LIBXSMM_MELTW_COMP_FLAG_CVTA_FUSE_SIGM:
+      return LIBXSMM_MELTW_FLAG_CVTA_FUSE_SIGM;
+    default:
+      return LIBXSMM_MELTW_FLAG_CVTA_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_comp_acvt_flags libxsmm_get_meltw_comp_acvt_flags( libxsmm_meltw_acvt_flags flags )
+{
+  switch ( flags ) {
+    case LIBXSMM_MELTW_FLAG_ACVT_NONE:
+      return LIBXSMM_MELTW_COMP_FLAG_ACVT_NONE;
+    case LIBXSMM_MELTW_FLAG_ACVT_FUSE_TANH:
+      return LIBXSMM_MELTW_COMP_FLAG_ACVT_FUSE_TANH;
+    case LIBXSMM_MELTW_FLAG_ACVT_FUSE_SIGM:
+      return LIBXSMM_MELTW_COMP_FLAG_ACVT_FUSE_SIGM;
+    default:
+      return LIBXSMM_MELTW_COMP_FLAG_ACVT_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_acvt_flags libxsmm_get_meltw_acvt_flags( libxsmm_meltw_comp_acvt_flags flags )
+{
+  switch ( flags ) {
+    case LIBXSMM_MELTW_COMP_FLAG_ACVT_NONE:
+      return LIBXSMM_MELTW_FLAG_ACVT_NONE;
+    case LIBXSMM_MELTW_COMP_FLAG_ACVT_FUSE_TANH:
+      return LIBXSMM_MELTW_FLAG_ACVT_FUSE_TANH;
+    case LIBXSMM_MELTW_COMP_FLAG_ACVT_FUSE_SIGM:
+      return LIBXSMM_MELTW_FLAG_ACVT_FUSE_SIGM;
+    default:
+      return LIBXSMM_MELTW_FLAG_ACVT_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_comp_cbiasact_flags libxsmm_get_meltw_comp_cbiasact_flags( libxsmm_meltw_cbiasact_flags flags )
+{
+  switch ( flags ) {
+    case LIBXSMM_MELTW_FLAG_CBIASACT_NONE:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_NONE;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_ACT_RELU:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_RELU;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_ACT_TANH:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_TANH;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_ACT_SIGM:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_SIGM;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_ACT_GELU:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_GELU;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_ACT_RELU_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_RELU_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_ACT_TANH_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_TANH_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_ACT_SIGM_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_SIGM_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_ACT_GELU_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_GELU_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_RELU:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_RELU;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_TANH:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_TANH;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_SIGM:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_SIGM;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_GELU:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_GELU;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_RELU_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_RELU_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_TANH_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_TANH_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_SIGM_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_SIGM_OVERWRITE_C;
+    case LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_GELU_OVERWRITE_C:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_GELU_OVERWRITE_C;
+    default:
+      return LIBXSMM_MELTW_COMP_FLAG_CBIASACT_NONE;
+  }
+}
+
+
+LIBXSMM_API_INTERN libxsmm_meltw_cbiasact_flags libxsmm_get_meltw_cbiasact_flags( libxsmm_meltw_comp_cbiasact_flags flags )
+{
+  switch ( flags ) {
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_NONE:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_NONE;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_RELU:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_ACT_RELU;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_TANH:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_ACT_TANH;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_SIGM:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_ACT_SIGM;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_GELU:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_ACT_GELU;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_RELU_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_ACT_RELU_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_TANH_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_ACT_TANH_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_SIGM_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_ACT_SIGM_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_GELU_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_ACT_GELU_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_RELU:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_RELU;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_TANH:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_TANH;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_SIGM:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_SIGM;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_GELU:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_GELU;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_RELU_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_RELU_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_TANH_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_TANH_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_SIGM_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_SIGM_OVERWRITE_C;
+    case LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_GELU_OVERWRITE_C:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_GELU_OVERWRITE_C;
+    default:
+      return LIBXSMM_MELTW_FLAG_CBIASACT_NONE;
+  }
 }
 

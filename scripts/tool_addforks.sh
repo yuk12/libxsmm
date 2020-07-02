@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ###############################################################################
 # Copyright (c) Intel Corporation - All rights reserved.                      #
 # This file is part of the LIBXSMM library.                                   #
@@ -15,15 +15,26 @@ GREP=$(command -v grep)
 CUT=$(command -v cut)
 GIT=$(command -v git)
 
+PRJ=libxsmm
+URL="https://api.github.com/repos/hfp/${PRJ}/forks"
+
 if [ "" != "${CURL}" ] && [ "" != "${GIT}" ] && \
    [ "" != "${GREP}" ] && [ "" != "${CUT}" ];
 then
-  for FORK in $(${CURL} -s https://api.github.com/repos/hfp/libxsmm/forks \
-  | ${GREP} "\"html_url\"" | ${GREP} "libxsmm" | ${CUT} -d/ -f4);
+  N=0
+  for FORK in $(${CURL} -s ${URL} \
+  | ${GREP} "\"html_url\"" | ${GREP} "${PRJ}" | ${CUT} -d/ -f4);
   do
-    ${GIT} remote add ${FORK} https://github.com/${FORK}/libxsmm.git
+    echo "Adding fork ${FORK}..."
+    ${GIT} remote add ${FORK} https://github.com/${FORK}/${PRJ}.git
     ${GIT} fetch ${FORK}
+    N=$((N+1))
   done
+  if [ "0" != "${N}" ]; then
+    echo "Processed number of forks: ${N}"
+  else
+    ${CURL} ${URL}
+  fi
 else
   echo "Error: missing prerequisites!"
   exit 1

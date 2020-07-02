@@ -1,4 +1,6 @@
+os: linux # default
 language: cpp
+#dist: xenial
 
 branches:
   except:
@@ -6,27 +8,27 @@ branches:
   - results
   - wip
 
-matrix:
+jobs:
   fast_finish: true
   include:
   - os: linux
     compiler: gcc
-    env: INSTALL=install-artifacts OPT=1 PYTHON=python3 LIBXSMM_MALLOC=1
+    env: INSTALL=install-artifacts OPT=1 PYTHON=python2 MALLOC=-1 LIBXSMM_MALLOC=1
   - os: linux
     compiler: gcc
     env: INSTALL=install DBG=1 LIBXSMM_SE=1 LIBXSMM_TARGET=0 ANALYZE=1
   - os: linux
     compiler: clang
-    env: INSTALL=install DBG=1 LIBXSMM_TARGET=sse
-    env: LD_LIBRARY_PATH=/usr/local/clang/lib:${LD_LIBRARY_PATH}
+    env: INSTALL=install DBG=1 LIBXSMM_TARGET=sse MALLOC=1 LD_LIBRARY_PATH=/usr/local/clang/lib:${LD_LIBRARY_PATH}
   - os: osx
-    osx_image: xcode11.2
+    osx_image: xcode11.3
     compiler: clang
-    env: DBG=1 OPT=1 SPACES=0 TEST_TIMER=0
+    env: SYM=1 OPT=1 SPACES=0 TIMER_DELTA=-1
   - os: osx
+    # xcode 6.4 is deprecated
     osx_image: xcode7.3
     compiler: clang
-    env: INSTALL=install-artifacts LIBXSMM_SE=1
+    env: DBG=1 INSTALL=install-artifacts LIBXSMM_SE=1
 
 env:
   global:
@@ -36,6 +38,7 @@ env:
 
 addons:
   apt:
+    update: true
     packages:
     - gfortran
     - libblas-dev
@@ -63,8 +66,8 @@ before_install:
     fi
   - if [ "1" = "${COVERITY_SCAN_BRANCH}" ] && [ -e /etc/ssl/certs/ca-certificates.crt ]; then
       echo -n | openssl s_client -connect scan.coverity.com:443 2>/dev/null
-      | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p'
-      | sudo tee -a /etc/ssl/certs/ca-certificates.crt;
+      | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' 2>/dev/null
+      | sudo tee -a /etc/ssl/certs/ca-certificates.crt 2>/dev/null;
     fi
   - if [ "" = "${CODECOV_ENABLED}" ] || [ "0" != "${CODECOV_ENABLED}" ]; then
       if [ "osx" = "${TRAVIS_OS_NAME}" ] && [ "clang" != "${CC}" ]; then sudo easy_install pip; fi;
@@ -106,46 +109,50 @@ before_script:
 script:
   - if [ "1" = "${COVERITY_SCAN_BRANCH}" ]; then exit 0; fi;
     source ${TRAVIS_BUILD_DIR}/.env/codecov.env $(if [ "clang" = "${CC}" ]; then echo "0"; fi) && make -e clean && (
-      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} TRACE=1 STATIC=0 BLAS=1 ABSLIBS=1 EFLAGS="-DITYPE=double" ${INSTALL} tests &&
-      if [ "g++" != "${CXX}" ] && [ "osx" != "${TRAVIS_OS_NAME}" ]; then
-        env LIBXSMM_TRACE=1 ${TRAVIS_BUILD_DIR}/tests/malloc 2> malloc-trace-${COVID}.txt;
-      fi
+      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} TRACE=1 STATIC=0 BLAS=1 ABSLIBS=1 MIX=0
+                       EFLAGS="-DITYPE=double -DINCLUDE_LIBXSMM_LAST" ${INSTALL} tests
     ) 2>&1 | tee .test.log && eval ${POSTPROC} && eval ${RUNXCOV} &&
     if [ "" != "${UPLOAD_ENABLED}" ] && [ "0" != "$((1<UPLOAD_ENABLED))" ]; then eval ${UPLOAD}; fi
 
   - if [ "1" = "${COVERITY_SCAN_BRANCH}" ]; then exit 0; fi;
     source ${TRAVIS_BUILD_DIR}/.env/codecov.env $(if [ "clang" = "${CC}" ]; then echo "0"; fi) && make -e clean && (
-      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} TRACE=1 MNK="19 27, 23" EFLAGS="-DLIBXSMM_MALLOC_MMAP" ${INSTALL} test-cp2k
+      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} TRACE=1 MNK="19 27, 23"
+                       EFLAGS="-DLIBXSMM_MALLOC_MMAP" ${INSTALL} test-cp2k
     ) 2>&1 | tee .test.log && eval ${POSTPROC} && eval ${RUNXCOV} &&
     if [ "" != "${UPLOAD_ENABLED}" ] && [ "0" != "$((1<UPLOAD_ENABLED))" ]; then eval ${UPLOAD}; fi
 
   - if [ "1" = "${COVERITY_SCAN_BRANCH}" ]; then exit 0; fi;
     source ${TRAVIS_BUILD_DIR}/.env/codecov.env $(if [ "clang" = "${CC}" ]; then echo "0"; fi) && make -e clean && (
-      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 MNK="4 8" STATIC=0 PREFETCH=0 CACHE=0 EFLAGS="-DLIBXSMM_NO_CTOR" ${INSTALL} test-nek
+      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 MNK="4 8" STATIC=0 PREFETCH=0 CACHE=0
+                       EFLAGS="-DLIBXSMM_NO_CTOR -DINCLUDE_LIBXSMM_LAST" ${INSTALL} test-nek
     ) 2>&1 | tee .test.log && eval ${POSTPROC} && eval ${RUNXCOV} &&
     if [ "" != "${UPLOAD_ENABLED}" ] && [ "0" != "$((1<UPLOAD_ENABLED))" ]; then eval ${UPLOAD}; fi
 
   - if [ "1" = "${COVERITY_SCAN_BRANCH}" ]; then exit 0; fi;
     source ${TRAVIS_BUILD_DIR}/.env/codecov.env $(if [ "clang" = "${CC}" ]; then echo "0"; fi) && make -e clean && (
-      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 PYMOD=1 EFLAGS="-DLIBXSMM_NO_CTOR" ${INSTALL} tests
+      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 PYMOD=1
+                       EFLAGS="-DLIBXSMM_NO_CTOR -DINCLUDE_LIBXSMM_LAST" ${INSTALL} tests
     ) 2>&1 | tee .test.log && eval ${POSTPROC} && eval ${RUNXCOV} &&
     if [ "" != "${UPLOAD_ENABLED}" ] && [ "0" != "$((1<UPLOAD_ENABLED))" ]; then eval ${UPLOAD}; fi
 
   - if [ "1" = "${COVERITY_SCAN_BRANCH}" ]; then exit 0; fi;
     source ${TRAVIS_BUILD_DIR}/.env/codecov.env $(if [ "clang" = "${CC}" ]; then echo "0"; fi) && make -e clean && (
-      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 MNK="9 3, 23" STATIC=0 EFLAGS="-DLIBXSMM_CAPACITY_REGISTRY=32" ${INSTALL} test-smm
+      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 MNK="9 3, 23" STATIC=0
+                       EFLAGS="-DLIBXSMM_CAPACITY_REGISTRY=32" ${INSTALL} test-smm
     ) 2>&1 | tee .test.log && eval ${POSTPROC} && eval ${RUNXCOV} &&
     if [ "" != "${UPLOAD_ENABLED}" ] && [ "0" != "$((1<UPLOAD_ENABLED))" ]; then eval ${UPLOAD}; fi
 
   - if [ "1" = "${COVERITY_SCAN_BRANCH}" ]; then exit 0; fi;
     source ${TRAVIS_BUILD_DIR}/.env/codecov.env $(if [ "clang" = "${CC}" ]; then echo "0"; fi) && make -e clean && (
-      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 EFLAGS="-DELEM_TYPE=char -DUSE_EXPECTED" INTRINSICS=1 ${INSTALL} tests
+      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 INTRINSICS=1 MIX=0
+                       EFLAGS="-DELEM_TYPE=char -DUSE_EXPECTED" ${INSTALL} tests
     ) 2>&1 | tee .test.log && eval ${POSTPROC} && eval ${RUNXCOV} &&
     if [ "" != "${UPLOAD_ENABLED}" ] && [ "0" != "$((1<UPLOAD_ENABLED))" ]; then eval ${UPLOAD}; fi
 
   - if [ "1" = "${COVERITY_SCAN_BRANCH}" ]; then exit 0; fi;
     source ${TRAVIS_BUILD_DIR}/.env/codecov.env $(if [ "clang" = "${CC}" ]; then echo "0"; fi) && make -e clean && (
-      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 SSE=0 AVX=0 JIT=0 EFLAGS="-DELEM_TYPE=short" ${INSTALL} tests
+      make -e ${MAKEJ} PREFIX=${UPLOAD_DIR} ${PEDANTIC_HIGH} SYM=1 SSE=0 AVX=0 JIT=0
+                       EFLAGS="-DELEM_TYPE=short" ${INSTALL} tests
     ) 2>&1 | tee .test.log && eval ${POSTPROC} && eval ${RUNXCOV} &&
     if [ "" != "${UPLOAD_ENABLED}" ] && [ "0" != "$((1<UPLOAD_ENABLED))" ]; then eval ${UPLOAD}; fi
 

@@ -48,6 +48,8 @@ int main(int argc, char* argv[]) {
 
   unsigned long long l_start, l_end;
   double l_total;
+  unsigned long long l_libxsmmflops;
+  libxsmm_kernel_info l_kinfo;
 
   if (argc != 7) {
     fprintf( stderr, "arguments: M #iters CSR-file!\n" );
@@ -125,9 +127,9 @@ int main(int argc, char* argv[]) {
 
   /* sparse routine */
 #if defined(__EDGE_EXECUTE_F32__)
-  mykernel = libxsmm_create_xcsr_soa( l_xgemm_desc, l_rowptr, l_colidx, (const void*)l_a_sp ).smm;
+  mykernel = libxsmm_create_xcsr_soa( l_xgemm_desc, l_rowptr, l_colidx, (const void*)l_a_sp, N_CRUNS ).smm;
 #else
-  mykernel = libxsmm_create_xcsr_soa( l_xgemm_desc, l_rowptr, l_colidx, (const void*)l_a_sp ).dmm;
+  mykernel = libxsmm_create_xcsr_soa( l_xgemm_desc, l_rowptr, l_colidx, (const void*)l_a_sp, N_CRUNS ).dmm;
 #endif
 
   l_start = libxsmm_timer_tick();
@@ -136,8 +138,11 @@ int main(int argc, char* argv[]) {
   }
   l_end = libxsmm_timer_tick();
   l_total = libxsmm_timer_duration(l_start, l_end);
+  libxsmm_get_kernel_info( LIBXSMM_CONST_VOID_PTR(mykernel), &l_kinfo);
+  l_libxsmmflops = l_kinfo.nflops;
   printf("%fs for sparse (asm)\n", l_total);
-  printf("%f GFLOPS for sparse (asm)\n", ((double)((double)REPS * (double)K * (double)l_elements * (double)N_CRUNS) * 2.0) / (l_total * 1.0e9));
+  printf("%f GFLOPS for sparse (asm), calculated\n", ((double)((double)REPS * (double)N * (double)l_elements * (double)N_CRUNS) * 2.0) / (l_total * 1.0e9));
+  printf("%f GFLOPS for sparse (asm), libxsmm   \n", ((double)((double)REPS * (double)l_libxsmmflops)) / (l_total * 1.0e9));
 
   /* check for errors */
   l_max_error = (REALTYPE)0.0;

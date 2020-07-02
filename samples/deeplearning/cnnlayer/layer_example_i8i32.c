@@ -28,7 +28,7 @@
 
 int main(int argc, char* argv[])
 {
-  unsigned char *naive_input;
+  unsigned char *naive_input, *naive_input_tmp;
   char *naive_filter;
   int *naive_output_fp;
   int *naive_libxsmm_output;
@@ -193,7 +193,7 @@ int main(int argc, char* argv[])
   output_libxsmm        = (int*) libxsmm_aligned_malloc( nImg*nOfm*ofhp*ofwp*sizeof(int), 2097152);
 
   /* initialize data */
-  unsigned char  *naive_input_tmp  = (unsigned char*)libxsmm_aligned_malloc( nImg*nIfm*ifhp*ifwp*sizeof(unsigned char), 2097152);
+  naive_input_tmp  = (unsigned char*)libxsmm_aligned_malloc( nImg*nIfm*ifhp*ifwp*sizeof(unsigned char), 2097152);
   zero_buf_uint8(naive_input, nImg*nIfm*ifhp*ifwp);
   if (padding_mode == 0 ) {
     init_buf_uint8(naive_input,          nImg*nIfm*ifhp*ifwp, 0, 0);
@@ -246,11 +246,7 @@ int main(int argc, char* argv[])
   conv_desc.buffer_format = LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM;
   conv_desc.filter_format = LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM;
   conv_desc.fuse_ops = LIBXSMM_DNN_CONV_FUSE_NONE;
-#if defined(USE_OVERWRITE)
-  conv_desc.options = (libxsmm_dnn_conv_option)(LIBXSMM_DNN_CONV_OPTION_OVERWRITE | LIBXSMM_DNN_CONV_OPTION_ACTIVATION_UNSIGNED);
-#else
-  conv_desc.options = LIBXSMM_DNN_CONV_OPTION_ACTIVATION_UNSIGNED;
-#endif
+  conv_desc.options = LIBXSMM_DNN_CONV_OPTION_OVERWRITE;
   conv_desc.datatype_in = LIBXSMM_DNN_DATATYPE_I8;
   conv_desc.datatype_out = LIBXSMM_DNN_DATATYPE_I32;
 
@@ -325,6 +321,19 @@ int main(int argc, char* argv[])
     printf("#   Performance - FWD (custom-Storage)   #\n");
     printf("##########################################\n");
     /* run LIBXSMM convolution for performance */
+    for (i = 0; i < 10; ++i) {
+#if defined(_OPENMP)
+#     pragma omp parallel
+#endif
+      {
+#if defined(_OPENMP)
+        const int tid = omp_get_thread_num();
+#else
+        const int tid = 0;
+#endif
+        libxsmm_dnn_execute_st( libxsmm_handle, LIBXSMM_DNN_COMPUTE_KIND_FWD, 0, tid );
+      }
+    }
     l_start = libxsmm_timer_tick();
     for (i = 0; i < iters; ++i) {
 #if defined(_OPENMP)

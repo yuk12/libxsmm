@@ -9,7 +9,6 @@
 /* Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm_source.h>
-#include <float.h>
 
 #if !defined(ITYPE)
 # define ITYPE double

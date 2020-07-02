@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env sh
 
 SRCDIR=../src
 GREP=$(command -v grep)
@@ -26,9 +26,6 @@ cat << EOM
 #endif
 #if defined(LIBXSMM_BUILD)
 # error LIBXSMM_BUILD cannot be defined for the header-only LIBXSMM!
-#endif
-#if !defined(LIBXSMM_API)
-# define LIBXSMM_API LIBXSMM_EXTERN_C LIBXSMM_INLINE LIBXSMM_RETARGETABLE
 #endif
 
 /**

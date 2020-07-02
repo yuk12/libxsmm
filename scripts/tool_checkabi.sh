@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ###############################################################################
 # Copyright (c) Intel Corporation - All rights reserved.                      #
 # This file is part of the LIBXSMM library.                                   #
@@ -73,7 +73,8 @@ then
                  [ "" = "$(echo ${SYMBOL} | ${SED} -n "/^malloc/p")" ] && \
                  [ "" = "$(echo ${SYMBOL} | ${SED} -n "/^free/p")" ] && \
                  [ "" = "$(echo ${SYMBOL} | ${SED} -n "/^_init/p")" ] && \
-                 [ "" = "$(echo ${SYMBOL} | ${SED} -n "/^_fini/p")" ];
+                 [ "" = "$(echo ${SYMBOL} | ${SED} -n "/^_fini/p")" ] && \
+                 [ "" = "$(echo ${SYMBOL} | ${SED} -n "/^iJIT_/p")" ];
             then
               echo "Error: non-conforming function name"
               echo "${LIB} -> ${SYMBOL}"
@@ -92,6 +93,9 @@ then
     done
     ${SORT} -u ${ABINEW} > ${ABITMP}
     ${MV} ${ABITMP} ${ABINEW}
+    if [ "so" != "${LIBTYPE}" ]; then
+      echo "Note: LIBXSMM must be built with \"make STATIC=0 SYM|DBG=1\"!"
+    fi
     REMOVED=$(${DIFF} --new-line-format="" --unchanged-line-format="" <(${SORT} ${ABICUR}) ${ABINEW})
     if [ "" = "${REMOVED}" ]; then
       ${CP} ${ABINEW} ${ABICUR}

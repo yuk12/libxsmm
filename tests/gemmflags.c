@@ -9,10 +9,6 @@
 /* Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm_source.h>
-#include <stdlib.h>
-#if defined(_DEBUG)
-# include <stdio.h>
-#endif
 
 
 int main(void)

@@ -9,11 +9,6 @@
 /* Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm.h>
-#include <stdlib.h>
-#include <string.h>
-#if defined(_DEBUG)
-# include <stdio.h>
-#endif
 
 #if !defined(ELEM_TYPE)
 # define ELEM_TYPE double

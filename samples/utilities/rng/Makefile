@@ -1,17 +1,13 @@
-# Export all variables to sub-make processes.
-#.EXPORT_ALL_VARIABLES: #export
-
 ROOTDIR = $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 DEPDIR = ../../..
 SRCDIR = .
 INCDIR = .
-BLDDIR = build
+BLDDIR = obj
 OUTDIR = .
 
 CXXFLAGS = $(NULL)
 CFLAGS = $(NULL)
 DFLAGS = $(NULL)
-IFLAGS = -I"$(INCDIR)" -I"$(DEPDIR)/include"
 
 BLAS = 0
 SYM = 1
@@ -20,13 +16,16 @@ OMP = 1
 # include common Makefile artifacts
 include $(DEPDIR)/Makefile.inc
 
-OUTNAME := $(shell basename "$(ROOTDIR)")
+# necessary include directories
+IFLAGS += -I$(call quote,$(INCDIR))
+IFLAGS += -I$(call quote,$(DEPDIR)/include)
+
 HEADERS := $(wildcard $(INCDIR)/*.h) $(wildcard $(INCDIR)/*.hpp) $(wildcard $(INCDIR)/*.hxx) $(wildcard $(INCDIR)/*.hh) \
            $(wildcard $(SRCDIR)/*.h) $(wildcard $(SRCDIR)/*.hpp) $(wildcard $(SRCDIR)/*.hxx) $(wildcard $(SRCDIR)/*.hh) \
            $(DEPDIR)/include/libxsmm_source.h
 CPPSRCS := $(wildcard $(SRCDIR)/*.cpp)
 CXXSRCS := $(wildcard $(SRCDIR)/*.cxx)
-CCXSRCS := $(wildcard $(SRCDIR)/*.cx)
+CCXSRCS := $(wildcard $(SRCDIR)/*.cc)
 CSOURCS := $(wildcard $(SRCDIR)/*.c)
 CPPOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CPPSRCS:.cpp=-cpp.o)))
 CXXOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CXXSRCS:.cxx=-cxx.o)))
@@ -46,7 +45,7 @@ OBJECTS := $(CPPOBJS) $(CXXOBJS) $(CCXOBJS) $(COBJCTS)
 FTNSRCS := $(FXXSRCS) $(F77SRCS) $(F90SRCS)
 MODULES := $(addsuffix .mod,$(basename $(FTNSRCS))) $(addsuffix .modmic,$(basename $(FTNSRCS)))
 FTNOBJS := $(FXXOBJS) $(F77OBJS) $(F90OBJS)
-XFILES := $(OUTDIR)/$(OUTNAME)
+XFILES := $(OUTDIR)/rng $(OUTDIR)/rng_avx512
 
 .PHONY: all
 all: $(XFILES)
@@ -54,8 +53,11 @@ all: $(XFILES)
 .PHONY: compile
 compile: $(OBJECTS) $(FTNOBJS)
 
-$(OUTDIR)/$(OUTNAME): $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)-c.o $(LIBDEP)
-	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)-c.o $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+$(OUTDIR)/rng: $(OUTDIR)/.make $(BLDDIR)/rng-c.o $(LIBDEP)
+	$(LD) -o $@ $(BLDDIR)/rng-c.o $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+
+$(OUTDIR)/rng_avx512: $(OUTDIR)/.make $(BLDDIR)/rng_avx512-c.o $(LIBDEP)
+	$(LD) -o $@ $(BLDDIR)/rng_avx512-c.o $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
 
 $(BLDDIR)/%-cpp.o: $(SRCDIR)/%.cpp .state $(BLDDIR)/.make $(HEADERS) Makefile $(DEPDIR)/Makefile.inc
 	$(CXX) $(DFLAGS) $(IFLAGS) $(CXXFLAGS) $(CTARGET) -c $< -o $@

@@ -1,17 +1,13 @@
-# Export all variables to sub-make processes.
-#.EXPORT_ALL_VARIABLES: #export
-
 ROOTDIR = $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 DEPDIR = ../..
 SRCDIR = .
 INCDIR = .
-BLDDIR = build
+BLDDIR = obj
 OUTDIR = .
 
 CXXFLAGS = $(NULL)
 CFLAGS = $(NULL)
-DFLAGS = -DLIBXSMM_GEMM_CONST
-IFLAGS = -I"$(INCDIR)" -I"$(DEPDIR)/include"
+DFLAGS = -DLIBXSMM_BLAS_CONST
 
 BLAS = 1
 OMP = 1
@@ -23,13 +19,17 @@ SSE = 0
 # include common Makefile artifacts
 include $(DEPDIR)/Makefile.inc
 
+# necessary include directories
+IFLAGS += -I$(call quote,$(INCDIR))
+IFLAGS += -I$(call quote,$(DEPDIR)/include)
+
 OUTNAME := $(shell basename "$(ROOTDIR)")
 HEADERS := $(wildcard $(INCDIR)/*.h) $(wildcard $(INCDIR)/*.hpp) $(wildcard $(INCDIR)/*.hxx) $(wildcard $(INCDIR)/*.hh) \
            $(wildcard $(SRCDIR)/*.h) $(wildcard $(SRCDIR)/*.hpp) $(wildcard $(SRCDIR)/*.hxx) $(wildcard $(SRCDIR)/*.hh) \
            $(DEPDIR)/include/libxsmm_source.h
 CPPSRCS := $(wildcard $(SRCDIR)/*.cpp)
 CXXSRCS := $(wildcard $(SRCDIR)/*.cxx)
-CCXSRCS := $(wildcard $(SRCDIR)/*.cx)
+CCXSRCS := $(wildcard $(SRCDIR)/*.cc)
 CSOURCS := $(wildcard $(SRCDIR)/*.c)
 CPPOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CPPSRCS:.cpp=-cpp.o)))
 CXXOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CXXSRCS:.cxx=-cxx.o)))
@@ -67,7 +67,7 @@ endif
 
 ifneq (,$(EIGENROOT))
   DFLAGS += -D__EIGEN
-  IFLAGS += -I"$(EIGENROOT)"
+  IFLAGS += -I$(call quote,$(EIGENROOT))
   EIGEN ?= 1
   ifneq (0,$(MKL))
     DFLAGS += -DEIGEN_USE_MKL_ALL
@@ -91,11 +91,11 @@ all: $(XFILES)
 compile: $(OBJECTS) $(FTNOBJS)
 
 # no need to link against any of LIBXSMM's libraries since the sample code uses header-only LIBXSMM
-$(OUTDIR)/$(OUTNAME)_smm: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_smm-cpp.o #$(LIBDEP) $(EXTDEP)
+$(OUTDIR)/$(OUTNAME)_smm: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_smm-cpp.o $(DEPDIR)/include/libxsmm_source.h
 	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_smm-cpp.o $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
 
 # no need to link against any of LIBXSMM's libraries since the sample code uses header-only LIBXSMM
-$(OUTDIR)/$(OUTNAME)_tensor: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_tensor-cpp.o #$(LIBDEP) $(EXTDEP)
+$(OUTDIR)/$(OUTNAME)_tensor: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_tensor-cpp.o $(DEPDIR)/include/libxsmm_source.h
 	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_tensor-cpp.o $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
 
 $(BLDDIR)/%-cpp.o: $(SRCDIR)/%.cpp .state $(BLDDIR)/.make $(HEADERS) Makefile $(DEPDIR)/Makefile.inc

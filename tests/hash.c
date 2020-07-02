@@ -9,9 +9,8 @@
 /* Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm_source.h>
-#include <stdlib.h>
+
 #if defined(_DEBUG)
-# include <stdio.h>
 # define FPRINTF(STREAM, ...) fprintf(STREAM, __VA_ARGS__)
 #else
 # define FPRINTF(STREAM, ...)

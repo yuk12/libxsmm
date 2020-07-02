@@ -10,18 +10,23 @@
 ******************************************************************************/
 #include "libxsmm_main.h"
 
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <string.h>
-#include <stdio.h>
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
-
 #if !defined(LIBXSMM_PRODUCT_LIMIT)
 # define LIBXSMM_PRODUCT_LIMIT 1024
 #endif
+
+
+#if defined(LIBXSMM_INTRINSICS_AVX512)
+LIBXSMM_APIVAR_PUBLIC_DEF(unsigned int libxsmm_intrinsics_mm512_rng_state0[16]);
+LIBXSMM_APIVAR_PUBLIC_DEF(unsigned int libxsmm_intrinsics_mm512_rng_state1[16]);
+LIBXSMM_APIVAR_PUBLIC_DEF(unsigned int libxsmm_intrinsics_mm512_rng_state2[16]);
+LIBXSMM_APIVAR_PUBLIC_DEF(unsigned int libxsmm_intrinsics_mm512_rng_state3[16]);
+#endif
+
+/* definition of corresponding variables */
+LIBXSMM_APIVAR_PUBLIC_DEF(unsigned int libxsmm_ninit);
+LIBXSMM_APIVAR_PUBLIC_DEF(int libxsmm_target_archid);
+LIBXSMM_APIVAR_PUBLIC_DEF(int libxsmm_verbosity);
+LIBXSMM_APIVAR_PUBLIC_DEF(int libxsmm_se);
 
 
 LIBXSMM_API libxsmm_gemm_descriptor* libxsmm_dgemm_descriptor_init(libxsmm_descriptor_blob* blob,
@@ -404,6 +409,58 @@ LIBXSMM_API libxsmm_mcopy_descriptor* libxsmm_mcopy_descriptor_init(libxsmm_desc
       result.ptr = NULL;
     }
   }
+  return result.ptr;
+}
+
+
+LIBXSMM_API libxsmm_meltw_descriptor* libxsmm_meltw_descriptor_init(libxsmm_descriptor_blob* blob,
+  libxsmm_datatype in_type, libxsmm_datatype out_type,
+  libxsmm_blasint m, libxsmm_blasint n,
+  libxsmm_blasint ldi, libxsmm_blasint ldo,
+  int flags, int operation)
+{
+  union {
+    libxsmm_meltw_descriptor* ptr;
+    libxsmm_descriptor_blob* blob;
+  } result;
+  LIBXSMM_DESCRIPTOR_CLEAR(blob);
+  result.blob = blob;
+  result.ptr->datatype = (unsigned char)LIBXSMM_GETENUM(in_type, out_type);
+  result.ptr->datatype2 = 0;
+  result.ptr->flags = (unsigned char)flags;
+  result.ptr->operation = (unsigned char)operation;
+  result.ptr->ldi = ldi;
+  result.ptr->ldo = ldo;
+  result.ptr->ldx = 0;
+  result.ptr->ldy = 0;
+  result.ptr->m = m;
+  result.ptr->n = n;
+  return result.ptr;
+}
+
+
+LIBXSMM_API libxsmm_meltw_descriptor* libxsmm_meltw_descriptor_init2(libxsmm_descriptor_blob* blob,
+  libxsmm_datatype in_type, libxsmm_datatype in2_type, libxsmm_datatype out_type, libxsmm_datatype out2_type,
+  libxsmm_blasint m, libxsmm_blasint n,
+  libxsmm_blasint ldi, libxsmm_blasint ldo, libxsmm_blasint ldx, libxsmm_blasint ldy,
+  int flags, int operation)
+{
+  union {
+    libxsmm_meltw_descriptor* ptr;
+    libxsmm_descriptor_blob* blob;
+  } result;
+  LIBXSMM_DESCRIPTOR_CLEAR(blob);
+  result.blob = blob;
+  result.ptr->datatype = (unsigned char)LIBXSMM_GETENUM(in_type, out_type);
+  result.ptr->datatype2 = (unsigned char)LIBXSMM_GETENUM(in2_type, out2_type);
+  result.ptr->flags = (unsigned char)flags;
+  result.ptr->operation = (unsigned char)operation;
+  result.ptr->ldi = ldi;
+  result.ptr->ldo = ldo;
+  result.ptr->ldx = ldx;
+  result.ptr->ldy = ldy;
+  result.ptr->m = m;
+  result.ptr->n = n;
   return result.ptr;
 }
 

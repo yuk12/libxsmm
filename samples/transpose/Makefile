@@ -1,17 +1,13 @@
-# Export all variables to sub-make processes.
-#.EXPORT_ALL_VARIABLES: #export
-
 ROOTDIR = $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 DEPDIR = ../..
 SRCDIR = .
 INCDIR = .
-BLDDIR = build
+BLDDIR = obj
 OUTDIR = .
 
 CXXFLAGS = $(NULL)
 CFLAGS = $(NULL)
 DFLAGS = $(NULL)
-IFLAGS = -I"$(INCDIR)" -I"$(DEPDIR)/include"
 
 BLAS = 2
 OMP = 1
@@ -23,13 +19,17 @@ SSE = 0
 # include common Makefile artifacts
 include $(DEPDIR)/Makefile.inc
 
+# necessary include directories
+IFLAGS += -I$(call quote,$(INCDIR))
+IFLAGS += -I$(call quote,$(DEPDIR)/include)
+
 OUTNAME := $(shell basename "$(ROOTDIR)")
 HEADERS := $(wildcard $(INCDIR)/*.h) $(wildcard $(INCDIR)/*.hpp) $(wildcard $(INCDIR)/*.hxx) $(wildcard $(INCDIR)/*.hh) \
            $(wildcard $(SRCDIR)/*.h) $(wildcard $(SRCDIR)/*.hpp) $(wildcard $(SRCDIR)/*.hxx) $(wildcard $(SRCDIR)/*.hh) \
            $(DEPDIR)/include/libxsmm_source.h
 CPPSRCS := $(wildcard $(SRCDIR)/*.cpp)
 CXXSRCS := $(wildcard $(SRCDIR)/*.cxx)
-CCXSRCS := $(wildcard $(SRCDIR)/*.cx)
+CCXSRCS := $(wildcard $(SRCDIR)/*.cc)
 CSOURCS := $(wildcard $(SRCDIR)/*.c)
 CPPOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CPPSRCS:.cpp=-cpp.o)))
 CXXOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CXXSRCS:.cxx=-cxx.o)))
@@ -58,9 +58,9 @@ all: $(XFILES)
 compile: $(OBJECTS) $(FTNOBJS)
 
 ifneq (,$(strip $(FC)))
-ifneq (0,$(shell echo "$$((3>$(GCC) || 40600<=$(FC_VERSION)))"))
+ifneq (0,$(shell echo "$$((3>$(GCC) || 40600<=$(FC_VERSION_NUM)))"))
 $(OUTDIR)/$(OUTNAME)f: $(OUTDIR)/.make $(FTNOBJS) $(FORTDEP) $(LIBDEP) $(EXTDEP)
-	$(FLD) -o $@ $(FTNOBJS) $(EXTLIB) $(FORTLIB) $(MAINLIB) $(FCMTFLAGS) $(SLDFLAGS) $(LDFLAGS) $(FLDFLAGS) $(ELDFLAGS)
+	$(FLD) -o $@ $(FTNOBJS) $(FORTLIB) $(EXTLIB) $(MAINLIB) $(FCMTFLAGS) $(SLDFLAGS) $(LDFLAGS) $(FLDFLAGS) $(ELDFLAGS)
 else
 .PHONY: $(OUTDIR)/$(OUTNAME)f
 endif
@@ -68,7 +68,7 @@ else
 .PHONY: $(OUTDIR)/$(OUTNAME)f
 endif
 
-$(OUTDIR)/$(OUTNAME): $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)-c.o $(LIBDEP) $(EXTDEP)
+$(OUTDIR)/$(OUTNAME): $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)-c.o $(DEPDIR)/include/libxsmm_source.h
 	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)-c.o $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
 
 $(OUTDIR)/kernel: $(OUTDIR)/.make $(BLDDIR)/kernel-c.o $(LIBDEP)

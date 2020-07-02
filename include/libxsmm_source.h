@@ -17,9 +17,6 @@
 #if defined(LIBXSMM_BUILD)
 # error LIBXSMM_BUILD cannot be defined for the header-only LIBXSMM!
 #endif
-#if !defined(LIBXSMM_API)
-# define LIBXSMM_API LIBXSMM_EXTERN_C LIBXSMM_INLINE LIBXSMM_RETARGETABLE
-#endif
 
 /**
  * This header is intentionally called "libxsmm_source.h" since the followings block
@@ -34,6 +31,8 @@
 #endif
 #include "../src/generator_common.c"
 #include "../src/generator_gemm.c"
+#include "../src/generator_gemm_amx.c"
+#include "../src/generator_gemm_amx_microkernel.c"
 #include "../src/generator_gemm_avx2_microkernel.c"
 #include "../src/generator_gemm_avx512_microkernel.c"
 #include "../src/generator_gemm_avx_microkernel.c"
@@ -43,6 +42,8 @@
 #include "../src/generator_gemm_sse3_microkernel.c"
 #include "../src/generator_matcopy.c"
 #include "../src/generator_matcopy_avx_avx512.c"
+#include "../src/generator_mateltwise.c"
+#include "../src/generator_mateltwise_avx_avx512.c"
 #include "../src/generator_packed.c"
 #include "../src/generator_packed_gemm_ac_rm_avx_avx2_avx512.c"
 #include "../src/generator_packed_gemm_avx_avx512.c"
@@ -54,6 +55,7 @@
 #include "../src/generator_spgemm_csc_asparse.c"
 #include "../src/generator_spgemm_csc_bsparse.c"
 #include "../src/generator_spgemm_csc_bsparse_soa.c"
+#include "../src/generator_spgemm_csc_csparse_soa.c"
 #include "../src/generator_spgemm_csc_reader.c"
 #include "../src/generator_spgemm_csr_asparse.c"
 #include "../src/generator_spgemm_csr_asparse_reg.c"
@@ -72,21 +74,25 @@
 #include "../src/libxsmm_dnn_convolution_weight_update.c"
 #include "../src/libxsmm_dnn_elementwise.c"
 #include "../src/libxsmm_dnn_fullyconnected.c"
-#include "../src/libxsmm_dnn_fullyconnected_backward.c"
+#include "../src/libxsmm_dnn_fullyconnected_backward_weight_update.c"
 #include "../src/libxsmm_dnn_fullyconnected_forward.c"
-#include "../src/libxsmm_dnn_fullyconnected_weight_update.c"
 #include "../src/libxsmm_dnn_fusedbatchnorm.c"
 #include "../src/libxsmm_dnn_fusedbatchnorm_backward.c"
 #include "../src/libxsmm_dnn_fusedbatchnorm_forward.c"
 #include "../src/libxsmm_dnn_fusedgroupnorm.c"
 #include "../src/libxsmm_dnn_fusedgroupnorm_backward.c"
 #include "../src/libxsmm_dnn_fusedgroupnorm_forward.c"
+#include "../src/libxsmm_dnn_optimizer.c"
+#include "../src/libxsmm_dnn_optimizer_sgd.c"
 #include "../src/libxsmm_dnn_pooling.c"
 #include "../src/libxsmm_dnn_pooling_backward.c"
 #include "../src/libxsmm_dnn_pooling_forward.c"
 #include "../src/libxsmm_dnn_rnncell.c"
 #include "../src/libxsmm_dnn_rnncell_backward_weight_update.c"
 #include "../src/libxsmm_dnn_rnncell_forward.c"
+#include "../src/libxsmm_dnn_softmaxloss.c"
+#include "../src/libxsmm_dnn_softmaxloss_backward.c"
+#include "../src/libxsmm_dnn_softmaxloss_forward.c"
 #include "../src/libxsmm_dnn_tensor.c"
 #include "../src/libxsmm_ext.c"
 #include "../src/libxsmm_ext_blocked_gemm.c"

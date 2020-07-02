@@ -58,36 +58,25 @@ Successively calling a kernel (i.e., multiple times) allows for amortizing the c
 
 ```C
 /** Call dispatched (*function_ptr)(a, b, c [, pa, pb, pc]). */
-libxsmm_[s|d]mmfunction libxsmm_[s|d]mmdispatch(
+libxsmm_[s|d]mmfunction libxsmm_[type-prefix]mmdispatch(
   libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k,
   /** NULL: tight fit (m) */ const libxsmm_blasint* lda,
   /** NULL: tight fit (k) */ const libxsmm_blasint* ldb,
   /** NULL: tight fit (m) */ const libxsmm_blasint* ldc,
-  /** NULL: LIBXSMM_ALPHA */ const real* alpha,
-  /** NULL: LIBXSMM_BETA  */ const real* beta,
-  /** NULL: LIBXSMM_FLAGS */ const int* flags,
-  /** NULL: LIBXSMM_PREFETCH_NONE (not LIBXSMM_PREFETCH!) */
-  const int* prefetch);
-
-libxsmm_w[i|s]mmfunction libxsmm_w[i|s]mmdispatch(
-  libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k,
-  /** NULL: tight fit (m) */ const libxsmm_blasint* lda,
-  /** NULL: tight fit (k) */ const libxsmm_blasint* ldb,
-  /** NULL: tight fit (m) */ const libxsmm_blasint* ldc,
-  /** NULL: LIBXSMM_ALPHA */ const int* alpha,
-  /** NULL: LIBXSMM_BETA  */ const int* beta,
+  /** NULL: LIBXSMM_ALPHA */ const type* alpha,
+  /** NULL: LIBXSMM_BETA  */ const type* beta,
   /** NULL: LIBXSMM_FLAGS */ const int* flags,
   /** NULL: LIBXSMM_PREFETCH_NONE (not LIBXSMM_PREFETCH!) */
   const int* prefetch);
 ```
 
-Overloaded function signatures are provided and allow to omit arguments (C++ and FORTRAN), which are then derived from the [configurable defaults](https://github.com/hfp/libxsmm/blob/master/src/template/libxsmm_config.h). In C++, `libxsmm_mmfunction<type>` can be used to instantiate a functor rather than making a distinction between numeric types per type-prefix. For lower precision GEMMs, `libxsmm_mmfunction<itype,otype=itype>` optionally takes a second type (output type).
+Overloaded function signatures are provided and allow to omit arguments (C++ and FORTRAN), which are then derived from the [configurable defaults](https://github.com/hfp/libxsmm/blob/master/include/libxsmm_config.h). In C++, `libxsmm_mmfunction<type>` can be used to instantiate a functor rather than making a distinction between numeric types per type-prefix. For lower precision GEMMs, `libxsmm_mmfunction<itype,otype=itype>` optionally takes a second type (output type).
 
 ```C
 /* generates or dispatches the code specialization */
 libxsmm_mmfunction<T> xmm(m, n, k);
 if (xmm) { /* JIT'ted code */
-  /* can be parallelized per e.g., OpenMP */
+  /* can be parallelized per, e.g., OpenMP */
   for (int i = 0; i < n; ++i) {
     xmm(a+i*asize, b+i*bsize, c+i*csize);
   }
@@ -120,7 +109,7 @@ xmm = libxsmm_dmmdispatch(23/*m*/, 23/*n*/, 23/*k*/,
   &alpha, &beta, &flags, &prefetch);
 ```
 
-Above, pointer-arguments of `libxsmm_dmmdispatch` can be NULL (or OPTIONAL in FORTRAN): for LDx this means a "tight" leading dimension, alpha, beta, and flags are given by a [default value](https://github.com/hfp/libxsmm/blob/master/src/template/libxsmm_config.h) (which is selected at compile-time), and for the prefetch strategy a NULL-argument refers to "no prefetch" (which is equivalent to an explicit `LIBXSMM_PREFETCH_NONE`). By design, the prefetch strategy can be changed at runtime (as soon as valid next-locations are used) without changing the call-site (kernel-signature with six arguments).
+Above, pointer-arguments of `libxsmm_dmmdispatch` can be NULL (or OPTIONAL in FORTRAN): for LDx this means a "tight" leading dimension, alpha, beta, and flags are given by a [default value](https://github.com/hfp/libxsmm/blob/master/include/libxsmm_config.h) (which is selected at compile-time), and for the prefetch strategy a NULL-argument refers to "no prefetch" (which is equivalent to an explicit `LIBXSMM_PREFETCH_NONE`). By design, the prefetch strategy can be changed at runtime (as soon as valid next-locations are used) without changing the call-site (kernel-signature with six arguments).
 
 <a name="implicit-batches"></a>
 
@@ -189,6 +178,10 @@ void libxsmm_dgemm_batch(const char transa_array[], const char transb_array[],
 ```
 
 <a name="batch-sync"></a>**NOTE**: the multi-threaded implementation (`ntasks > 1` or "omp" form of the functions) avoids data races if indexes or pointers for the destination (C-)matrix are duplicated. This synchronization occurs automatically (`beta != 0`), but can be avoided by passing a negative `batchsize`, `group_size` and/or a negative `group_count`.
+
+### User-Data Dispatch
+
+It can be desired to dispatch user-defined data, i.e., to query a value based on a key. This functionality can be used to, e.g., dispatch multiple kernels in one step if a code location relies on multiple kernels. This way, one can pay the cost of dispatch one time per task rather than according to the number of JIT-kernels used by this task. This functionality is detailed in the section about [Service Functions](libxsmm_aux.md#user-data-dispatch).
 
 ### Call Wrapper
 

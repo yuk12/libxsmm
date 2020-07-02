@@ -9,11 +9,10 @@
 /* Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include "magazine.h"
-#include <libxsmm.h>
-
-#if 0 /* process batch of A, B, and C in "random" order */
-# define SHUFFLE
+#if !defined(SHUFFLE)
+# include <libxsmm.h>
 #endif
+
 #if 0 /* auto-dispatch SMM kernel */
 # define AUTO
 #endif
@@ -75,7 +74,7 @@ int main(int argc, char* argv[])
 #endif
 
   /* initialize data according to touch-first policy */
-#if defined(_OPENMP) && !defined(SYNC)
+#if defined(_OPENMP)
 # pragma omp parallel for private(i, j)
 #endif
   for (i = 0; i < size; ++i) {
@@ -91,15 +90,15 @@ int main(int argc, char* argv[])
     }
   }
 
-#if defined(_OPENMP) && !defined(SYNC)
+#if defined(_OPENMP)
 # pragma omp parallel
 #endif
-  {
-#if !defined(_OPENMP) || defined(SYNC)
-    start = libxsmm_timer_tick();
-#else /* OpenMP thread pool is already populated (parallel region) */
+  { /* OpenMP thread pool is already populated (parallel region) */
+#if defined(_OPENMP)
 #   pragma omp single
+#endif
     start = libxsmm_timer_tick();
+#if defined(_OPENMP)
 #   pragma omp for private(i, j)
 #endif
     for (i = 0; i < size - 1; ++i) {
@@ -117,12 +116,12 @@ int main(int argc, char* argv[])
 #if defined(AUTO)
       libxsmm_dgemm(&transa, &transb, &m, &n, &k,
         &alpha, a + STREAM_A(j * na), &lda, b + STREAM_B(j * nb), &ldb,
-         &beta, c + STREAM_C(j * nc), &ldc);
+         &beta, c + STREAM_C(SYNC(j, nc, size)), &ldc);
 #elif !defined(NOPREFETCH) && (STREAM_A(1) || STREAM_B(1) || STREAM_C(1)) /* prefetch */
-      xmm.fun(a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(j * nc),
-              a + STREAM_A(p * na), b + STREAM_B(p * nb), c + STREAM_C(p * nc));
+      xmm.fun(a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(SYNC(j, nc, size)),
+              a + STREAM_A(p * na), b + STREAM_B(p * nb), c + STREAM_C(SYNC(p, nc, size)));
 #else
-      xmm.fun(a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(j * nc));
+      xmm.fun(a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(SYNC(j, nc, size)));
 #endif
     }
   }
@@ -134,18 +133,22 @@ int main(int argc, char* argv[])
 #if defined(AUTO)
   libxsmm_dgemm(&transa, &transb, &m, &n, &k,
     &alpha, a + STREAM_A(j * na), &lda, b + STREAM_B(j * nb), &ldb,
-     &beta, c + STREAM_C(j * nc), &ldc);
+     &beta, c + STREAM_C(SYNC(j, nc, size)), &ldc);
 #elif !defined(NOPREFETCH) && (STREAM_A(1) || STREAM_B(1) || STREAM_C(1)) /* prefetch */
-  xmm.fun(a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(j * nc),
-          a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(j * nc));
+  xmm.fun(a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(SYNC(j, nc, size)),
+          a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(SYNC(j, nc, size)));
 #else
-  xmm.fun(a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(j * nc));
+  xmm.fun(a + STREAM_A(j * na), b + STREAM_B(j * nb), c + STREAM_C(SYNC(j, nc, size)));
 #endif
   duration = libxsmm_timer_duration(start, libxsmm_timer_tick());
 
   if (0 < duration) {
     libxsmm_kernel_info info;
+#if defined(AUTO) /* no explicit kernel hence no query */
+    info.nflops = 2 * m * n * k;
+#else
     libxsmm_get_kernel_info(xmm.ptr, &info);
+#endif
     printf("%.1f GFLOPS/s\n", (1E-9 * info.nflops) / duration * size);
   }
   printf("%.1f ms\n", 1000.0 * duration);

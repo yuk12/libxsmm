@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-BSD3-blue.svg)](LICENSE.md) [![Travis CI](https://travis-ci.org/hfp/libxsmm.svg?branch=master "Master branch build status")](https://github.com/hfp/libxsmm/wiki/Status) [![Coverity](https://scan.coverity.com/projects/7405/badge.svg "Coverity Scan Build Status")](https://scan.coverity.com/projects/hfp-libxsmm) [![ReadtheDocs](https://readthedocs.org/projects/libxsmm/badge/?version=latest "Read the Docs")](https://libxsmm.readthedocs.io/)
 
-LIBXSMM is a library for specialized dense and sparse matrix operations as well as for deep learning primitives such as small convolutions. The library is targeting Intel Architecture with Intel&#160;SSE, Intel&#160;AVX, Intel&#160;AVX2, Intel&#160;AVX&#8209;512 (with VNNI and Bfloat16). Code generation is mainly based on Just&#8209;In&#8209;Time (JIT) code specialization for compiler-independent performance (matrix multiplications, matrix transpose/copy, sparse functionality, and deep learning). LIBXSMM is suitable for "build once and deploy everywhere" i.e., no special target flags are needed to exploit the available performance. Supported GEMM datatypes are: `FP64`, `FP32`, `bfloat16`, `int16`, and `int8`.
+LIBXSMM is a library for specialized dense and sparse matrix operations as well as for deep learning primitives such as small convolutions. The library is targeting Intel Architecture with Intel&#160;SSE, Intel&#160;AVX, Intel&#160;AVX2, Intel&#160;AVX&#8209;512 (with VNNI and Bfloat16), and Intel&#160;AMX (Advanced Matrix Extensions) supported by future Intel processor code-named Sapphire Rapids. Code generation is mainly based on Just&#8209;In&#8209;Time (JIT) code specialization for compiler-independent performance (matrix multiplications, matrix transpose/copy, sparse functionality, and deep learning). LIBXSMM is suitable for "build once and deploy everywhere", i.e., no special target flags are needed to exploit the available performance. Supported GEMM datatypes are: `FP64`, `FP32`, `bfloat16`, `int16`, and `int8`.
 
 For a list questions and answers, please also have a look at [https://github.com/hfp/libxsmm/wiki/Q&A](https://github.com/hfp/libxsmm/wiki/Q&A).
 
@@ -16,29 +16,32 @@ For a list questions and answers, please also have a look at [https://github.com
 
 **<a name="what-is-a-small-convolution"></a>What is a small convolution?** In the last years, new workloads such as deep learning and more specifically convolutional neural networks (CNN) emerged and are pushing the limits of today's hardware. One of the expensive kernels is a small convolution with certain kernel sizes such that calculations in the frequency space is not the most efficient method when compared with direct convolutions. LIBXSMM's current support for convolutions aims for an easy to use invocation of small (direct) convolutions, which are intended for CNN training and classification.
 
-**<a name="getting-started"></a><a name="hello-libxsmm"></a>Getting Started**: The following code is focused on a specific functionality but may be considered as "Hello LIBXSMM". Build the example with `cd /path/to/libxsmm; make STATIC=0` (shared library), save the code under `hello.cpp` (below) and compile with `g++ -I/path/to/libxsmm/include hello.cpp -L/path/to/libxsmm/lib -lxsmm -lblas -o hello` (GNU CCC), and finally execute with `LD_LIBRARY_PATH=/path/to/libxsmm/lib LIBXSMM_VERBOSE=2 ./hello`.
+**<a name="getting-started"></a><a name="hello-libxsmm"></a>Getting Started**: The following C++ code is focused on a specific functionality but may be considered as [Hello LIBXSMM](https://github.com/hfp/libxsmm/tree/master/samples/hello). Build the example with `cd /path/to/libxsmm; make STATIC=0` (shared library), save the code under `hello.cpp` (below) and compile with `g++ -I/path/to/libxsmm/include hello.cpp -L/path/to/libxsmm/lib -lxsmm -lblas -o hello` (GNU CCC), and finally execute with `LD_LIBRARY_PATH=/path/to/libxsmm/lib LIBXSMM_VERBOSE=2 ./hello`.
 
 ```cpp
 #include <libxsmm.h>
 #include <vector>
-int main(int argc, char* argv[])
-{
-  typedef double value_type;
+int main(/*int argc, char* argv[]*/) {
+  typedef double T;
   int batchsize = 1000, m = 13, n = 5, k = 7;
-  std::vector<value_type> a(batchsize*m*k), b(batchsize*k*n), c(m*n, 0);
+  std::vector<T> a(batchsize * m * k), b(batchsize * k * n), c(m * n, 0);
   /* C/C++ and Fortran interfaces are available */
-  typedef libxsmm_mmfunction<value_type> kernel_type;
+  typedef libxsmm_mmfunction<T> kernel_type;
   /* generates and dispatches a matrix multiplication kernel (C++ functor) */
-  kernel_type kernel(LIBXSMM_GEMM_FLAG_NONE, m,n,k, 1.0/*alpha*/, 1.0/*beta*/);
+  kernel_type kernel(LIBXSMM_GEMM_FLAG_NONE, m, n, k, 1.0 /*alpha*/, 1.0 /*beta*/);
   assert(kernel);
   for (int i = 0; i < batchsize; ++i) { /* initialize input */
-    a[i*m*k] = static_cast<value_type>(1) / (i % 25);
-    b[i*k*n] = static_cast<value_type>(7) / (i % 75);
+    for (int ki = 0; ki < k; ++ki) {
+      for (int j = 0; j < m; ++j) a[i * j * ki] = static_cast<T>(1) / ((i + j + ki) % 25);
+      for (int j = 0; j < n; ++j) b[i * j * ki] = static_cast<T>(7) / ((i + j + ki) % 75);
+    }
   }
-  /* kernel multiplies and accumulates matrix products: C += Ai * Bi */
-  for (int i = 0; i < batchsize; ++i) kernel(&a[i*m*k], &b[i*k*n], &c[0]);
+  /* kernel multiplies and accumulates matrices: C += Ai * Bi */
+  for (int i = 0; i < batchsize; ++i) kernel(&a[i * m * k], &b[i * k * n], &c[0]);
 }
 ```
+
+Plain [C code](https://github.com/hfp/libxsmm/blob/master/samples/hello/hello.c) as well as [Fortran code](https://github.com/hfp/libxsmm/blob/master/samples/hello/hello.f) resemble the same [example](https://github.com/hfp/libxsmm/tree/master/samples/hello).
 
 ## Interfaces and Domains<a name="interfaces"></a>
 
@@ -85,6 +88,7 @@ The [service function domain (AUX)](documentation/libxsmm_aux.md) contains routi
 * [Getting and setting the target architecture](documentation/libxsmm_aux.md#getting-and-setting-the-target-architecture)
 * [Getting and setting the verbosity](documentation/libxsmm_aux.md#getting-and-setting-the-verbosity)
 * [Measuring time durations (timer)](documentation/libxsmm_aux.md#timer-facility)
+* [Dispatching user-data and multiple kernels](documentation/libxsmm_aux.md#user-data-dispatch)
 * [Loading and storing data (I/O)](documentation/libxsmm_aux.md#meta-image-file-io)
 * [Allocating memory](documentation/libxsmm_aux.md#memory-allocation)
 
@@ -107,7 +111,9 @@ The main interface file is *generated*, and it is therefore **not** stored in th
 
 The build system relies on GNU&#160;Make (typically associated with the `make` command, but e.g. FreeBSD is calling it `gmake`). The build can be customized by using key&#8209;value pairs. Key&#8209;value pairs can be supplied in two ways: (1)&#160;after the "make" command, or (2)&#160;prior to the "make" command (`env`) which is effectively the same as exporting the key&#8209;value pair as an environment variable (`export`, or `setenv`). Both methods can be mixed (the second method may require make's `-e` flag).
 
-**NOTE**: By default, C/C++ and FORTRAN compilers are needed (some sample code is written in C++). Beside of specifying the compilers (`make CXX=g++ CC=gcc FC=gfortran` and maybe `AR=ar`), the need for a FORTRAN compiler can be relaxed (`make FC=` or `make FORTRAN=0`). The latter affects the availability of the MODule file and the corresponding 'libxsmmf' library (the interface 'libxsmm.f' is still generated).
+<a name="zero-config-abi"></a>In contrast to [header-only](#zero-config) which does not require configuration by default, 3rd-party build systems can compile and link LIBXSMM's sources but still avoid configuring the library (per `libxsmm_config.py`). The prerequisite to omit configuration is to opt-in by defining LIBXSMM_DEFAULT_CONFIG (`-D`). The zero-config feature is not available for LIBXSMM's Fortran interface.
+
+**NOTE**: By default, C/C++ and FORTRAN compilers are needed (some sample code is written in C++). Beside of specifying the compilers (`make CXX=g++ CC=gcc FC=gfortran` and maybe `AR=ar`), the need for a FORTRAN compiler can be relaxed (`make FC=` or `make FORTRAN=0`). The latter affects the availability of the MODule file and the corresponding 'libxsmm.f' library (the interface 'libxsmm.f' is still generated).
 
 The build system considers a set of given key-value pairs as a single unique build and triggers a rebuild for a distinct set of flags. For more advanced builds or additional background, please consult the section about [Customization](documentation/libxsmm_tune.md). To generate the interface of the library inside of the 'include' directory and to build the static library (by default, STATIC=1 is activated). Run any (or both) of the following command(s):
 
@@ -128,7 +134,7 @@ A variety of build environments is out-of-the-box compatible, see [https://githu
 make COMPATIBLE=1
 ```
 
-<a name="outdated-binutils"></a>In case of outdated Binutils, compilation can fail to assemble code when building the library (this has nothing to do with JIT-generated code and it does not affect how JIT-code is targeting the system). In contrast to the default (`INTRINSICS=2`), `INTRINSICS=1` enables to statically depend on the desired target e.g., `AVX=3 MIC=0`, or `AVX=2` (if the target is omitted, the default target is used). Try to work around failing compilation with:
+<a name="outdated-binutils"></a>In case of outdated Binutils, compilation can fail to assemble code when building the library (this has nothing to do with JIT-generated code and it does not affect how JIT-code is targeting the system). In contrast to the default (`INTRINSICS=2`), `INTRINSICS=1` enables to statically depend on the desired target, e.g., `AVX=3 MIC=0`, or `AVX=2` (if the target is omitted, the default target is used). Try to work around failing compilation with:
 
 ```bash
 make INTRINSICS=1
@@ -150,7 +156,7 @@ make realclean
 <a name="fortran"></a>FORTRAN code can make use of LIBXSMM:
 
 * By using the module and linking with 'libxsmmf', 'libxsmm', and (optionally) 'libxsmmext',
-* By including 'libxsmm.f' and linking with 'libxsmm', and (optionally) 'libxsmmext', or
+* <a name="header-only-fortran"></a>By including 'libxsmm.f' and linking with 'libxsmm', and (optionally) 'libxsmmext', or
 * By (implicitly) calling a SUBROUTINE and linking with 'libxsmm', and (optionally) 'libxsmmext'.
 
 **Note**: Using the Fortran module or including the interface, requires at least a Fortran&#160;2003 compiler (F2K3). FORTRAN&#160;77 compatibility is only implicitly available (no interface), and the available subset of routines is documented in 'libxsmm.f' and marked with [comments](https://github.com/hfp/libxsmm/search?q=implementation+provided+for+Fortran+77+compatibility) (part of the implementation).
@@ -159,11 +165,7 @@ make realclean
 
 Version&#160;1.4.4 introduced support for "header-only" usage in C and C++. By only including 'libxsmm_source.h' allows to get around building the library. However, this gives up on a clearly defined application binary interface (ABI). An ABI may allow for hot-fixes after deploying an application (when relying on the shared library form), and it may also ensure to only rely on the public interface of LIBXSMM. In contrast, the header-only form not only exposes the internal implementation of LIBXSMM but can also increase the turnaround time during development of an application (due to longer compilation times). The header file is intentionally named "libxsmm_**source**.h" since this header file relies on the [src](https://github.com/hfp/libxsmm/tree/master/src) directory (with the implications as noted earlier).
 
-To use the header-only form, 'libxsmm_source.h' needs to be *generated*. The build target shown below ('header-only') has been introduced in LIBXSMM&#160;1.6.2 but `make cheader` can be used alternatively (or must be used instead in case of earlier versions). Generating the C interface is necessary since the library must be configured (see [configuration](https://github.com/hfp/libxsmm/blob/master/src/template/libxsmm_config.h) template).
-
-```bash
-make header-only
-```
+<a name="zero-config"></a>The header-only form depends on 'libxsmm_source.h' which is *generated* according to the content of the source folder (`src`). LIBXSMM&#160;1.16 (and later) provides header-only support without invoking a make-target (zero configuration) for any given checkout of LIBXSMM. To use configured header-only (non-default), LIBXSMM_CONFIGURED must be defined (`-D`). Previously, it was necessary to invoke `make header-only` (v1.6.2 or later), `make cheader` (prior to v1.6.2), or any target building the library (`make`). The zero-config feature allows 3rd-party build systems an easier integration of LIBXSMM, which also holds true if the system builds LIBXSMM from source (see [classic ABI](#zero-config-abi)). Fortran code may [include](#header-only-fortran) `libxsmm.f` but still requires that interface to be generated.
 
 **NOTE**: building an application applies the same build settings to LIBXSMM! For instance, to omit debug code inside of LIBXSMM `NDEBUG` must be defined (`-DNDEBUG`).
 
@@ -206,7 +208,7 @@ make MNK="1 2 3 4 5" PREFIX=/path/to/libxsmm-install install
 
 <a name="install-destdir"></a>Both `PREFIX` and `DESTDIR` are equivalent and can be relative or absolute paths. An installation can be repeated for different locations without triggering a rebuild. The prefix directory *inside* of each of the [package configuration files](#pkg-config) is set to where LIBXSMM is built (staging folder) unless `PREFIX` or `DESTDIR` is specified. The effect of `PREFIX` (or `DESTDIR`) with respect to the pkg-config files is independent of whether the install-target is invoked or not (make).
 
-Further, performing `make install-minimal` omits the documentation (default: 'PREFIX/share/libxsmm'). Moreover, PINCDIR, POUTDIR, PBINDIR, and PDOCDIR allow to customize the locations underneath of the PREFIX location. To build a general package for an unpredictable audience (Linux distribution, or similar), it is advised to not over-specify or customize the build step i.e., JIT, SSE, AVX, OMP, BLAS, etc. should not be used. The following is building and installing a complete set of libraries where the generated interface matches both the static and the shared libraries:
+Further, performing `make install-minimal` omits the documentation (default: 'PREFIX/share/libxsmm'). Moreover, PINCDIR, POUTDIR, PBINDIR, and PDOCDIR allow to customize the locations underneath of the PREFIX location. To build a general package for an unpredictable audience (Linux distribution, or similar), it is advised to not over-specify or customize the build step, i.e., JIT, SSE, AVX, OMP, BLAS, etc. should not be used. The following is building and installing a complete set of libraries where the generated interface matches both the static and the shared libraries:
 
 ```bash
 make PREFIX=/path/to/libxsmm-install STATIC=0 install
@@ -217,7 +219,7 @@ make PREFIX=/path/to/libxsmm-install install
 
 ### Verbose Mode
 
-The [verbose mode](documentation/libxsmm_aux.md#getting-and-setting-the-verbosity) (level of verbosity) allows for an insight into the code dispatch mechanism by receiving a small tabulated statistic as soon as the library terminates. The design point for this functionality is to not impact the performance of any critical code path i.e., verbose mode is always enabled and does not require symbols (SYM=1) or debug code (DBG=1). The statistics appears (`stderr`) when the environment variable LIBXSMM_VERBOSE is set to a non-zero value. For example:
+The [verbose mode](documentation/libxsmm_aux.md#getting-and-setting-the-verbosity) (level of verbosity) allows for an insight into the code dispatch mechanism by receiving a small tabulated statistic as soon as the library terminates. The design point for this functionality is to not impact the performance of any critical code path, i.e., verbose mode is always enabled and does not require symbols (SYM=1) or debug code (DBG=1). The statistics appears (`stderr`) when the environment variable LIBXSMM_VERBOSE is set to a non-zero value. For example:
 
 ```bash
 LIBXSMM_VERBOSE=1 ./myapplication
@@ -307,17 +309,23 @@ Please note that comparing performance results depends on whether the operands o
 
 **\[8]&#160;[https://ceed.exascaleproject.org/ceed-code/](https://ceed.exascaleproject.org/ceed-code/)**: The Center for Efficient Exascale Discretizations (CEED) is building on the efforts of the Nek5000, MFEM, MAGMA, OCCA and PETSc projects to develop application program interfaces (APIs), both at high-level and at low-level to enable applications to take advantage of high-order methods. The CEED low-level API, [libCEED](https://ceed.exascaleproject.org/libceed/) uses LIBXSMM as a [backend](https://github.com/CEED/libCEED#backends) for high performance on CPUs.
 
+**\[9]&#160;[https://github.com/romeric/Fastor](https://github.com/romeric/Fastor)**: Fastor is a light-weight high performance tensor algebra framework for modern C++ and can optionally use LIBXSMM as [JIT-backend](https://github.com/romeric/Fastor/wiki/9.-Using-the-LIBXSMM-MKL-JIT-backend).
+
 ### Machine Learning (ML)
 
-**\[9]&#160;[https://github.com/baidu-research/DeepBench](https://github.com/baidu-research/DeepBench#deepbench)**: The primary purpose of DeepBench is to benchmark operations that are important to deep learning on different hardware platforms. LIBXSMM's DNN primitives have been [incorporated into DeepBench](https://github.com/baidu-research/DeepBench/tree/master/code/intel/convolution/libxsmm_conv) to demonstrate an increased performance of deep learning on Intel hardware.
+**\[10]&#160;[https://github.com/plaidml/plaidml](https://github.com/plaidml/plaidml)**: PlaidML is an open source tensor compiler aiming for performance portability across a wide range of CPUs, GPUs and other accelerators. Combined with Intel’s nGraph compiler, PlaidML is targeting popular deep learning frameworks such as PyTorch, Keras (TensorFlow), and OpenVino. [PlaidML/v1](https://github.com/plaidml/plaidml/tree/plaidml-v1) (development branch) adopted [MLIR](https://mlir.llvm.org/), an extensible compiler infrastructure gaining industry-wide adoption. PlaidML/v1 started using LIBXSMM as backend for targeting CPUs.
 
-**\[10]&#160;[https://www.tensorflow.org/](https://tensorflow.org/)**: TensorFlow&trade; is an open source software library for numerical computation using data flow graphs. TensorFlow was originally developed by researchers and engineers working on the Google Brain Team for the purposes of conducting machine learning and deep neural networks research. LIBXSMM can be [used](documentation/tensorflow.md#tensorflow-with-libxsmm) to increase the performance of TensorFlow on Intel hardware.
+**\[11]&#160;[https://github.com/intel/intel-extension-for-pytorch](https://github.com/intel/intel-extension-for-pytorch)**: Intel Extension for PyTorch aims for a smooth user experience of PyTorch on CPUs by the means of good performance. The extension pack started to rely on [LIBXSMM for achieving high performance on CPUs](https://arxiv.org/abs/2005.04680).
 
-**\[11]&#160;[https://github.com/IntelLabs/SkimCaffe](https://github.com/IntelLabs/SkimCaffe#skimcaffe-specific-description)**: SkimCaffe from Intel Labs is a Caffe branch for training of sparse CNNs, which provide 80-95% sparsity in convolutions and fully-connected layers. LIBXSMM's SPMDM domain (SParseMatrix-DenseMatrix multiplication) evolved from SkimCaffe, and since then LIBXSMM implements the sparse operations in SkimCaffe.
+**\[12]&#160;[https://www.tensorflow.org/](https://tensorflow.org/)**: TensorFlow&trade; is an open source software library for numerical computation using data flow graphs. TensorFlow was originally developed by researchers and engineers working on the Google Brain Team for the purposes of conducting machine learning and deep neural networks research. LIBXSMM can be [used](documentation/tensorflow.md#tensorflow-with-libxsmm) to increase the performance of TensorFlow on Intel hardware.
+
+**\[13]&#160;[https://github.com/IntelLabs/SkimCaffe](https://github.com/IntelLabs/SkimCaffe#skimcaffe-specific-description)**: SkimCaffe from Intel Labs is a Caffe branch for training of sparse CNNs, which provide 80-95% sparsity in convolutions and fully-connected layers. LIBXSMM's SPMDM domain (SParseMatrix-DenseMatrix multiplication) evolved from SkimCaffe, and since then LIBXSMM implements the sparse operations in SkimCaffe.
+
+**\[14]&#160;[https://github.com/baidu-research/DeepBench](https://github.com/baidu-research/DeepBench#deepbench)**: The primary purpose of DeepBench is to benchmark operations that are important to deep learning on different hardware platforms. LIBXSMM's DNN primitives have been [incorporated into DeepBench](https://github.com/baidu-research/DeepBench/tree/master/code/intel/convolution/libxsmm_conv) to demonstrate an increased performance of deep learning on Intel hardware.
 
 ### Automated Driving (AD)
 
-**\[12]&#160;[https://software.seek.intel.com/accelerating-eigen-math-library](https://software.seek.intel.com/accelerating-eigen-math-library)**: Accelerating The Eigen Math Library for Automated Driving Workloads: The Need for Speed in Kalman Filtering. An article in [Issue&#160;31](https://software.intel.com/sites/default/files/managed/4f/73/parallel-universe-issue-31.pdf) of The Parallel Universe magazine.
+**\[15]&#160;[https://software.seek.intel.com/accelerating-eigen-math-library](https://software.seek.intel.com/accelerating-eigen-math-library)**: Accelerating The Eigen Math Library for Automated Driving Workloads: The Need for Speed in Kalman Filtering. An article in [Issue&#160;31](https://software.intel.com/sites/default/files/managed/4f/73/parallel-universe-issue-31.pdf) of The Parallel Universe magazine.
 
 ## References
 

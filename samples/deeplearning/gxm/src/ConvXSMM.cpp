@@ -58,18 +58,18 @@ ConvXSMM::ConvXSMM(ConvImplParams* gp, int engine) : ConvImpl(gp, engine)
   if(gp->out_data_type == DT_FLOAT)
     conv_desc.options = LIBXSMM_DNN_CONV_OPTION_OVERWRITE;
   else if(gp->out_data_type == DT_BF16)
-    conv_desc.options = LIBXSMM_DNN_CONV_OPTION_F32_BF16_CVT_RNE_OVERWRITE;
+    conv_desc.options = LIBXSMM_DNN_CONV_OPTION_OVERWRITE;
 
   if(gp->bias_term)
-    conv_desc.fuse_ops = LIBXSMM_DNN_CONV_FUSE_BIAS;
+    printf("GxM Error: Fusion for Bias into convolution is not available!\n");
   if(gp->relu)
-    conv_desc.fuse_ops = LIBXSMM_DNN_CONV_FUSE_RELU;
+    printf("GxM Error: Fusion for ReLU into convolution is not available!\n");
   if(gp->bias_term && gp->relu)
-    conv_desc.fuse_ops = LIBXSMM_DNN_CONV_FUSE_BIAS_RELU;
+    printf("GxM Error: Fusion for ReLU ind Bias into convolution is not available!\n");
   if(gp->compute_stats)
-    conv_desc.fuse_ops = LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD;
+    printf("GxM Error: Fusion for Batch stats into convolution is not available!\n");
   if(gp->compute_stats && gp->bwd_relu)
-    conv_desc.fuse_ops = LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD_RELU_BWD;
+    printf("GxM Error: Fusion for Batch stats and ReLU into convolution is not available!\n");
 
   if(gp->in_data_type == DT_BF16 && gp->out_data_type == DT_FLOAT)
   {

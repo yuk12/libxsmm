@@ -14,17 +14,6 @@
 #include "libxsmm_typedefs.h"
 #include "libxsmm_dnn.h"
 
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <stdlib.h>
-#if !defined(NDEBUG)
-# include <stdio.h>
-#endif
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
-
 /** Opaque handles which represents convolutions and LIBXSMM datatypes */
 LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_dnn_tensor libxsmm_dnn_tensor;
 
@@ -79,6 +68,8 @@ typedef enum libxsmm_dnn_tensor_type {
   LIBXSMM_DNN_REGULAR_FILTER_TRANS,
   /* gradient filter */
   LIBXSMM_DNN_GRADIENT_FILTER,
+  /* master filter */
+  LIBXSMM_DNN_MASTER_FILTER,
   /** general filter type */
   LIBXSMM_DNN_FILTER,
   /* regular bias */
@@ -107,6 +98,8 @@ typedef enum libxsmm_dnn_tensor_type {
   LIBXSMM_DNN_CHANNEL_VARIANCE,
   /** general bias type */
   LIBXSMM_DNN_CHANNEL_SCALAR,
+  /** Labels */
+  LIBXSMM_DNN_LABEL,
   /** batch stats */
   LIBXSMM_DNN_BATCH_STATS,
   LIBXSMM_DNN_MAX_STATS_FWD,

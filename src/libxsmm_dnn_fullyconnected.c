@@ -8,23 +8,17 @@
 ******************************************************************************/
 /* Alexander Heinecke, Sasikanth Avancha (Intel Corp.)
 ******************************************************************************/
-#include "libxsmm_dnn_fullyconnected_weight_update.h"
-#include "libxsmm_dnn_fullyconnected_backward.h"
+#include "libxsmm_dnn_fullyconnected_backward_weight_update.h"
 #include "libxsmm_dnn_fullyconnected_forward.h"
 #include "libxsmm_main.h"
-#define STRIDE_BRGEMM
-
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <string.h>
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
-
 
 LIBXSMM_API libxsmm_dnn_fullyconnected* libxsmm_dnn_create_fullyconnected(libxsmm_dnn_fullyconnected_desc fullyconnected_desc, libxsmm_dnn_err_t* status) {
   libxsmm_dnn_fullyconnected* handle = 0;
+  const libxsmm_trans_descriptor* tr_desc = 0;
+  libxsmm_descriptor_blob blob;
+
+  /* init libxsmm */
+  LIBXSMM_INIT
 
   if ( ((fullyconnected_desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (fullyconnected_desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16)) ||
        ((fullyconnected_desc.datatype_in == LIBXSMM_DNN_DATATYPE_F32)  && (fullyconnected_desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32))  ||
@@ -55,17 +49,574 @@ LIBXSMM_API libxsmm_dnn_fullyconnected* libxsmm_dnn_create_fullyconnected(libxsm
           handle->bk = handle->desc.K;
           *status = LIBXSMM_DNN_WARN_FC_SUBOPTIMAL_K_BLOCKING;
         }
+        if ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_F32) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32) )  {
+#if 0
+          handle->fwd_bf = atoi(getenv("FWD_BF"));
+          handle->bwd_bf = atoi(getenv("BWD_BF"));
+          handle->upd_bf = atoi(getenv("UPD_BF"));
+          handle->fwd_2d_blocking = atoi(getenv("FWD_2D_BLOCKING"));
+          handle->bwd_2d_blocking = atoi(getenv("BWD_2D_BLOCKING"));
+          handle->upd_2d_blocking = atoi(getenv("UPD_2D_BLOCKING"));
+          handle->fwd_row_teams = atoi(getenv("FWD_ROW_TEAMS"));
+          handle->fwd_column_teams = atoi(getenv("FWD_COLUMN_TEAMS"));
+          handle->bwd_row_teams = atoi(getenv("BWD_ROW_TEAMS"));
+          handle->bwd_column_teams = atoi(getenv("BWD_COLUMN_TEAMS"));
+          handle->upd_row_teams = atoi(getenv("UPD_ROW_TEAMS"));
+          handle->upd_column_teams = atoi(getenv("UPD_COLUMN_TEAMS"));
+          handle->ifm_subtasks = atoi(getenv("IFM_SUBTASKS"));
+          handle->ofm_subtasks = atoi(getenv("OFM_SUBTASKS"));
+#else
+          /* Initialize with default values */
+          handle->fwd_bf = 1;
+          handle->bwd_bf = 1;
+          handle->upd_bf = 1;
+          handle->fwd_2d_blocking = 0;
+          handle->bwd_2d_blocking = 0;
+          handle->upd_2d_blocking = 0;
+          handle->fwd_row_teams = 1;
+          handle->fwd_column_teams = 1;
+          handle->bwd_row_teams = 1;
+          handle->bwd_column_teams = 1;
+          handle->upd_row_teams = 1;
+          handle->upd_column_teams = 1;
+          handle->ifm_subtasks = 1;
+          handle->ofm_subtasks = 1;
+
+          if (handle->desc.C == 100 && handle->desc.K == 1024 && handle->desc.threads == 28) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 1;
+            handle->fwd_row_teams = 14;
+            handle->fwd_column_teams = 2;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 1;
+            handle->bwd_column_teams = 1;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 14 == 0) ? 14 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 1024 && handle->desc.K == 1024 && handle->desc.threads == 28) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 1;
+            handle->fwd_row_teams = 7;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = ((handle->desc.K/handle->bk) % 8 == 0) ? 8 : 1;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 7;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 14 == 0) ? 14 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 7;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 512 && handle->desc.K == 512 && handle->desc.threads == 28) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 1;
+            handle->fwd_column_teams = 1;
+            handle->bwd_bf = ((handle->desc.K/handle->bk) % 4 == 0) ? 4 : 1;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 1;
+            handle->bwd_column_teams = 1;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 14 == 0) ? 14 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 1024 && handle->desc.K == 1 && handle->desc.threads == 28) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 1;
+            handle->fwd_column_teams = 1;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 1;
+            handle->bwd_row_teams = 14;
+            handle->bwd_column_teams = 2;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 2 == 0) ? 2 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 1024 && handle->desc.K == 1024 && handle->desc.threads == 20) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 1;
+            handle->bwd_row_teams = 5;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 5;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 100 && handle->desc.K == 1024 && handle->desc.threads == 20) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 1;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 1;
+            handle->bwd_column_teams = 1;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 9 == 0) ? 9 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = ((handle->bk % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+          }
+
+          if (handle->desc.C == 1024 && handle->desc.K == 1024 && handle->desc.threads == 24) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 6;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 6;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 6;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 100 && handle->desc.K == 1024 && handle->desc.threads == 24) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 1;
+            handle->bwd_row_teams = 12;
+            handle->bwd_column_teams = 2;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 5;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 512 && handle->desc.K == 512 && handle->desc.threads == 24) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = ((handle->desc.K/handle->bk) % 4 == 0) ? 4 : 1;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 5;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 5;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 512 && handle->desc.K == 512 && handle->desc.threads == 20) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 1;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 1;
+            handle->bwd_column_teams = 1;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = ((handle->bc % 4 == 0) && (handle->upd_2d_blocking == 0)) ? 4 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 1024 && handle->desc.K == 1 && handle->desc.threads == 24) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 5;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = 1/*((handle->desc.N/handle->bn) % 1 == 0) ? 1 : 1*/;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 5;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = ((handle->bc % 4 == 0) && (handle->upd_2d_blocking == 0)) ? 4 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 1024 && handle->desc.K == 1 && handle->desc.threads == 20) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 6;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 1;
+            handle->bwd_row_teams = 5;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = 1/*((handle->desc.N/handle->bn) % 1 == 0) ? 1 : 1*/;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 6;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+#endif
+        } else if ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16) )  {
+#if 0
+          handle->fwd_bf = atoi(getenv("FWD_BF"));
+          handle->bwd_bf = atoi(getenv("BWD_BF"));
+          handle->upd_bf = atoi(getenv("UPD_BF"));
+          handle->fwd_2d_blocking = atoi(getenv("FWD_2D_BLOCKING"));
+          handle->bwd_2d_blocking = atoi(getenv("BWD_2D_BLOCKING"));
+          handle->upd_2d_blocking = atoi(getenv("UPD_2D_BLOCKING"));
+          handle->fwd_row_teams = atoi(getenv("FWD_ROW_TEAMS"));
+          handle->fwd_column_teams = atoi(getenv("FWD_COLUMN_TEAMS"));
+          handle->bwd_row_teams = atoi(getenv("BWD_ROW_TEAMS"));
+          handle->bwd_column_teams = atoi(getenv("BWD_COLUMN_TEAMS"));
+          handle->upd_row_teams = atoi(getenv("UPD_ROW_TEAMS"));
+          handle->upd_column_teams = atoi(getenv("UPD_COLUMN_TEAMS"));
+          handle->ifm_subtasks = atoi(getenv("IFM_SUBTASKS"));
+          handle->ofm_subtasks = atoi(getenv("OFM_SUBTASKS"));
+#else
+          /* Initialize with default values */
+          handle->fwd_bf = 1;
+          handle->bwd_bf = 1;
+          handle->upd_bf = 1;
+          handle->fwd_2d_blocking = 0;
+          handle->bwd_2d_blocking = 0;
+          handle->upd_2d_blocking = 0;
+          handle->fwd_row_teams = 1;
+          handle->fwd_column_teams = 1;
+          handle->bwd_row_teams = 1;
+          handle->bwd_column_teams = 1;
+          handle->upd_row_teams = 1;
+          handle->upd_column_teams = 1;
+          handle->ifm_subtasks = 1;
+          handle->ofm_subtasks = 1;
+
+          if (handle->desc.threads == 14) {
+            handle->fwd_bf = 1;
+            handle->bwd_bf = 1;
+            handle->upd_bf = 1;
+            handle->fwd_2d_blocking = 1;
+            handle->bwd_2d_blocking = 1;
+            handle->upd_2d_blocking = 0;
+            handle->fwd_row_teams = 2;
+            handle->fwd_column_teams = 7;
+            handle->bwd_row_teams = 2;
+            handle->bwd_column_teams = 7;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1;
+            handle->ofm_subtasks = 1;
+          }
+
+          if (handle->desc.threads == 2) {
+            handle->fwd_bf = 1;
+            handle->bwd_bf = 1;
+            handle->upd_bf = 1;
+            handle->fwd_2d_blocking = 1;
+            handle->bwd_2d_blocking = 1;
+            handle->upd_2d_blocking = 0;
+            handle->fwd_row_teams = 2;
+            handle->fwd_column_teams = 1;
+            handle->bwd_row_teams = 2;
+            handle->bwd_column_teams = 1;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1;
+            handle->ofm_subtasks = 1;
+          }
+
+          if (handle->desc.threads == 4) {
+            handle->fwd_bf = 1;
+            handle->bwd_bf = 1;
+            handle->upd_bf = 1;
+            handle->fwd_2d_blocking = 1;
+            handle->bwd_2d_blocking = 1;
+            handle->upd_2d_blocking = 0;
+            handle->fwd_row_teams = 2;
+            handle->fwd_column_teams = 2;
+            handle->bwd_row_teams = 2;
+            handle->bwd_column_teams = 2;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1;
+            handle->ofm_subtasks = 1;
+          }
+
+          if (handle->desc.threads == 8) {
+            handle->fwd_bf = 1;
+            handle->bwd_bf = 1;
+            handle->upd_bf = 1;
+            handle->fwd_2d_blocking = 1;
+            handle->bwd_2d_blocking = 1;
+            handle->upd_2d_blocking = 0;
+            handle->fwd_row_teams = 2;
+            handle->fwd_column_teams = 4;
+            handle->bwd_row_teams = 2;
+            handle->bwd_column_teams = 4;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1;
+            handle->ofm_subtasks = 1;
+          }
+
+           if (handle->desc.threads == 16) {
+            handle->fwd_bf = 1;
+            handle->bwd_bf = 1;
+            handle->upd_bf = 1;
+            handle->fwd_2d_blocking = 1;
+            handle->bwd_2d_blocking = 1;
+            handle->upd_2d_blocking = 0;
+            handle->fwd_row_teams = 2;
+            handle->fwd_column_teams = 8;
+            handle->bwd_row_teams = 2;
+            handle->bwd_column_teams = 8;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1;
+            handle->ofm_subtasks = 1;
+          }
+
+          if (handle->desc.C == 100 && handle->desc.K == 1024 && handle->desc.threads == 28) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 1;
+            handle->fwd_row_teams = 14;
+            handle->fwd_column_teams = 2;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 1;
+            handle->bwd_column_teams = 1;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 14 == 0) ? 14 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 1024 && handle->desc.K == 1024 && handle->desc.threads == 28) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 1;
+            handle->fwd_row_teams = 7;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = ((handle->desc.K/handle->bk) % 8 == 0) ? 8 : 1;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 7;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 14 == 0) ? 14 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 7;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 512 && handle->desc.K == 512 && handle->desc.threads == 28) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 1;
+            handle->fwd_column_teams = 1;
+            handle->bwd_bf = ((handle->desc.K/handle->bk) % 4 == 0) ? 4 : 1;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 1;
+            handle->bwd_column_teams = 1;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 14 == 0) ? 14 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 1024 && handle->desc.K == 1 && handle->desc.threads == 28) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 1;
+            handle->fwd_column_teams = 1;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 1;
+            handle->bwd_row_teams = 14;
+            handle->bwd_column_teams = 2;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 2 == 0) ? 2 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 1024 && handle->desc.K == 1024 && handle->desc.threads == 20) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 1;
+            handle->bwd_row_teams = 5;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 5;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+
+          if (handle->desc.C == 100 && handle->desc.K == 1024 && handle->desc.threads == 20) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 1;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 1;
+            handle->bwd_column_teams = 1;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 9 == 0) ? 9 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = ((handle->bk % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+          }
+
+          if (handle->desc.C == 1024 && handle->desc.K == 1024 && handle->desc.threads == 24) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 6;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 6;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 6;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 100 && handle->desc.K == 1024 && handle->desc.threads == 24) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 1;
+            handle->bwd_row_teams = 12;
+            handle->bwd_column_teams = 2;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 5;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 512 && handle->desc.K == 512 && handle->desc.threads == 24) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = ((handle->desc.K/handle->bk) % 4 == 0) ? 4 : 1;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 5;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 5;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = ((handle->bc % 2 == 0) && (handle->upd_2d_blocking == 0)) ? 2 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 512 && handle->desc.K == 512 && handle->desc.threads == 20) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 1;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 1;
+            handle->bwd_column_teams = 1;
+            handle->upd_bf = ((handle->desc.N/handle->bn) % 15 == 0) ? 15 : 1;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 1;
+            handle->upd_column_teams = 1;
+            handle->ifm_subtasks = ((handle->bc % 4 == 0) && (handle->upd_2d_blocking == 0)) ? 4 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 1024 && handle->desc.K == 1 && handle->desc.threads == 24) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 5;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 0;
+            handle->bwd_row_teams = 5;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = 1/*((handle->desc.N/handle->bn) % 1 == 0) ? 1 : 1*/;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 5;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = ((handle->bc % 4 == 0) && (handle->upd_2d_blocking == 0)) ? 4 : 1;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+          if (handle->desc.C == 1024 && handle->desc.K == 1 && handle->desc.threads == 20) {
+            handle->fwd_bf = 1/*((handle->desc.C/handle->bc) % 1 == 0) ? 1 : 1*/;
+            handle->fwd_2d_blocking = 0;
+            handle->fwd_row_teams = 6;
+            handle->fwd_column_teams = 4;
+            handle->bwd_bf = 1/*((handle->desc.K/handle->bk) % 1 == 0) ? 1 : 1*/;
+            handle->bwd_2d_blocking = 1;
+            handle->bwd_row_teams = 5;
+            handle->bwd_column_teams = 4;
+            handle->upd_bf = 1/*((handle->desc.N/handle->bn) % 1 == 0) ? 1 : 1*/;
+            handle->upd_2d_blocking = 0;
+            handle->upd_row_teams = 6;
+            handle->upd_column_teams = 4;
+            handle->ifm_subtasks = 1/*((handle->bc % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+            handle->ofm_subtasks = 1/*((handle->bk % 1 == 0) && (handle->upd_2d_blocking == 0)) ? 1 : 1*/;
+          }
+#endif
+        }
       } else {
+        /* check that we cannot fuse */
+        if ( handle->desc.fuse_ops != LIBXSMM_DNN_FULLYCONNECTED_FUSE_NONE  ) {
+          free( handle );
+          *status = LIBXSMM_DNN_ERR_FC_UNSUPPORTED_FUSION;
+          return 0;
+        }
+
         /* we need to compute the memory layout given the */
         if ( (handle->desc.C % 16 == 0) && (handle->desc.K % 16 == 0) ) {
           if ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32) ) {
             *status = libxsmm_dnn_get_feature_map_blocks( handle->desc.C, handle->desc.K,
-                                                          &(handle->ifmblock), &(handle->ofmblock), &(handle->fm_lp_block),
-                                                          LIBXSMM_DNN_DATATYPE_F32, LIBXSMM_DNN_DATATYPE_F32 );
+                &(handle->ifmblock), &(handle->ofmblock), &(handle->fm_lp_block),
+                LIBXSMM_DNN_DATATYPE_F32, LIBXSMM_DNN_DATATYPE_F32 );
           } else if ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_F32) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32) ) {
             *status = libxsmm_dnn_get_feature_map_blocks( handle->desc.C, handle->desc.K,
-                                                          &(handle->ifmblock), &(handle->ofmblock), &(handle->fm_lp_block),
-                                                          handle->desc.datatype_in, handle->desc.datatype_out );
+                &(handle->ifmblock), &(handle->ofmblock), &(handle->fm_lp_block),
+                handle->desc.datatype_in, handle->desc.datatype_out );
           } else {
             /* should not happen, not implemented */
           }
@@ -90,14 +641,26 @@ LIBXSMM_API libxsmm_dnn_fullyconnected* libxsmm_dnn_create_fullyconnected(libxsm
       }
       /* create barrier */
       handle->barrier = libxsmm_barrier_create(handle->desc.threads, 1);
-      /* calculate scratch size for batchstats */
+
+      /* If in SPR, generate tilerelease kernel */
+      if (libxsmm_target_archid >= LIBXSMM_X86_AVX512_SPR) {
+        int l_tr_flags = LIBXSMM_GEMM_FLAG_NO_SETUP_TILECONFIG | ( LIBXSMM_GEMM_VNNI_FLAGS('N', 'N', 'V', 'N') );
+        handle->tilerelease_kernel = libxsmm_bsmmdispatch(handle->bk, handle->bk, handle->bk, NULL, NULL, NULL, NULL, NULL, &l_tr_flags, NULL);
+      }
+      /* calculate scratch size */
       if ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32) ) {
         handle->scratch_size = sizeof(float) * ( ( (size_t)handle->desc.C * (size_t)handle->desc.N ) + ( (size_t)handle->desc.C * (size_t)handle->desc.K ) );
       } else if ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16)  ) {
-        handle->scratch_size = (sizeof(float) * LIBXSMM_MAX( LIBXSMM_MAX( handle->bk, handle->bn ), handle->bc ) * LIBXSMM_MAX( LIBXSMM_MAX( handle->bk, handle->bn ), handle->bc ) * handle->desc.threads);
+        /* Let's allocate maximum required scratch  */
+        size_t size_fwd = sizeof(float) *  LIBXSMM_MAX(handle->desc.K * handle->desc.N, handle->desc.threads * LIBXSMM_MAX(handle->bk * handle->bn, handle->desc.K));
+        /* In case of K = 1 we pad A and B to "bk=2" */
+        size_t size_bwd = (handle->desc.K != 1) ? ( sizeof(float) * LIBXSMM_MAX(handle->desc.C * handle->desc.N, handle->desc.threads * handle->bc * handle->bn) + sizeof(libxsmm_bfloat16) * handle->desc.C * handle->desc.K ) : ( sizeof(float) * handle->desc.C * handle->desc.N + sizeof(libxsmm_bfloat16) * handle->desc.C * 2 + sizeof(libxsmm_bfloat16) * 2 * handle->desc.N );
+        size_t size_upd = sizeof(float) * LIBXSMM_MAX(handle->desc.C * handle->desc.K, handle->desc.threads * handle->bc * handle->bk) + sizeof(libxsmm_bfloat16) * handle->desc.threads * handle->bk * handle->bc + sizeof(libxsmm_bfloat16) * (handle->desc.N * (handle->desc.C + handle->desc.K));
+        handle->scratch_size = LIBXSMM_MAX(LIBXSMM_MAX(size_fwd, size_bwd), size_upd);
+        handle->doutput_scratch_mark = handle->scratch_size;
+        handle->scratch_size += 2 * sizeof(libxsmm_bfloat16) * handle->desc.N *  handle->desc.K;
       } else {
-        handle->scratch_size = sizeof(float) * LIBXSMM_MAX( ((size_t)handle->desc.C + (size_t)handle->desc.K) * (size_t)handle->desc.N,
-                                                             (size_t)handle->desc.C * (size_t)handle->desc.K);
+        handle->scratch_size = sizeof(float) * ( (((size_t)handle->desc.C + (size_t)handle->desc.K) * (size_t)handle->desc.N) + ((size_t)handle->desc.C * (size_t)handle->desc.K) );
       }
       /* create code pointers in some special cases */
       if ( ((handle->desc.buffer_format & LIBXSMM_DNN_TENSOR_FORMAT_NCPACKED) > 0) && ((handle->desc.filter_format & LIBXSMM_DNN_TENSOR_FORMAT_CKPACKED) > 0)  ) {
@@ -105,45 +668,112 @@ LIBXSMM_API libxsmm_dnn_fullyconnected* libxsmm_dnn_create_fullyconnected(libxsm
           float alpha = 1.0f;
           /* beta is set to 1 for ncnc kcck format because ifm is split into 2 blocks */
           float beta  = 1.0f;
+          float zerobeta  = 0.0f;
+          int updflags = LIBXSMM_GEMM_FLAGS( 'N', 'T' );
+          /* For UPD kernels we consider subtasking... */
+          libxsmm_blasint M = handle->bk/handle->ofm_subtasks;
+          libxsmm_blasint N = handle->bc/handle->ifm_subtasks;
+
           libxsmm_blasint lda = (libxsmm_blasint)handle->bk;
           libxsmm_blasint ldb = (libxsmm_blasint)handle->bc;
           libxsmm_blasint ldc = (libxsmm_blasint)handle->bk;
 
-          if ( handle->desc.fuse_ops == LIBXSMM_DNN_FULLYCONNECTED_FUSE_NONE ) {
-#ifdef ADDRESS_BRGEMM
-            handle->gemm_fwd.xgemm.smra = libxsmm_smmdispatch_reducebatch_addr(handle->bk, handle->bn, handle->bc, &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
-            handle->gemm_bwd.xgemm.smra = libxsmm_smmdispatch_reducebatch_addr(handle->bc, handle->bn, handle->bk, &ldb, &lda, &ldb, &alpha, &beta, NULL, NULL);
-#endif
-#ifdef OFFSET_BRGEMM
-            handle->gemm_fwd.xgemm.smro = libxsmm_smmdispatch_reducebatch_offs(handle->bk, handle->bn, handle->bc, &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
-            handle->gemm_bwd.xgemm.smro = libxsmm_smmdispatch_reducebatch_offs(handle->bc, handle->bn, handle->bk, &ldb, &lda, &ldb, &alpha, &beta, NULL, NULL);
-#endif
-#ifdef STRIDE_BRGEMM
-            handle->gemm_fwd.xgemm.smrs = libxsmm_smmdispatch_reducebatch_strd(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(float), handle->bc*handle->bn*sizeof(float), &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
-            handle->gemm_bwd.xgemm.smrs = libxsmm_smmdispatch_reducebatch_strd(handle->bc, handle->bn, handle->bk, handle->bk*handle->bc*sizeof(float), handle->bk*handle->bn*sizeof(float), &ldb, &lda, &ldb, &alpha, &beta, NULL, NULL);
-#endif
-          } else {
-            /* should not happen */
-          }
+          handle->gemm_fwd.xgemm.smrs = libxsmm_smmdispatch_reducebatch_strd(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(float), handle->bc*handle->bn*sizeof(float), &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
+          handle->gemm_fwd2.xgemm.smrs = libxsmm_smmdispatch_reducebatch_strd(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(float), handle->bc*handle->bn*sizeof(float), &lda, &ldb, &ldc, &alpha, &zerobeta, NULL, NULL);
+          handle->gemm_bwd.xgemm.smrs = libxsmm_smmdispatch_reducebatch_strd(handle->bc, handle->bn, handle->bk, handle->bk*handle->bc*sizeof(float), handle->bk*handle->bn*sizeof(float), &ldb, &lda, &ldb, &alpha, &beta, NULL, NULL);
+          handle->gemm_bwd2.xgemm.smrs = libxsmm_smmdispatch_reducebatch_strd(handle->bc, handle->bn, handle->bk, handle->bk*handle->bc*sizeof(float), handle->bk*handle->bn*sizeof(float), &ldb, &lda, &ldb, &alpha, &zerobeta, NULL, NULL);
+
+          /* Transpose kernel used for weight transpose in bwd pass */
+          tr_desc = libxsmm_trans_descriptor_init(&blob, sizeof(float), handle->bk, handle->bc, handle->bc);
+          handle->tr_kernel = libxsmm_dispatch_trans(tr_desc);
+
+          /* update has different LDs */
+          lda = (libxsmm_blasint)handle->bk;
+          ldb = (libxsmm_blasint)handle->bc;
+          ldc = (libxsmm_blasint)handle->bk;
+          handle->gemm_upd.xgemm.smrs = libxsmm_smmdispatch_reducebatch_strd(M, N, handle->bn, handle->desc.K*handle->bn*sizeof(float), handle->desc.C*handle->bn*sizeof(float), &lda, &ldb, &ldc, &alpha, &beta, &updflags, NULL);
+          handle->gemm_upd2.xgemm.smrs = libxsmm_smmdispatch_reducebatch_strd(M, N, handle->bn, handle->desc.K*handle->bn*sizeof(float), handle->desc.C*handle->bn*sizeof(float), &lda, &ldb, &ldc, &alpha, &zerobeta, &updflags, NULL);
         } else if ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16) ) {
           float alpha = 1.0f;
-          float beta  = 0.0f;
+          float beta  = 1.0f;
+          float zerobeta  = 0.0f;
+          /* For UPD kernels we consider subtasking... */
+          libxsmm_blasint M = handle->bk/handle->ofm_subtasks;
+          libxsmm_blasint N = handle->bc/handle->ifm_subtasks;
+
           libxsmm_blasint lda = (libxsmm_blasint)handle->bk;
           libxsmm_blasint ldb = (libxsmm_blasint)handle->bc;
           libxsmm_blasint ldc = (libxsmm_blasint)handle->bk;
 
-          if ( handle->desc.fuse_ops == LIBXSMM_DNN_FULLYCONNECTED_FUSE_NONE ) {
-#ifdef ADDRESS_BRGEMM
-            handle->gemm_fwd.xgemm.bsmra = libxsmm_bsmmdispatch_reducebatch_addr(handle->bk, handle->bn, handle->bc, &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
-#endif
-#ifdef OFFSET_BRGEMM
-            handle->gemm_fwd.xgemm.bsmro = libxsmm_bsmmdispatch_reducebatch_offs(handle->bk, handle->bn, handle->bc, &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
-#endif
-#ifdef STRIDE_BRGEMM
-            handle->gemm_fwd.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
-#endif
+          if (libxsmm_target_archid == LIBXSMM_X86_AVX512_SPR) {
+            libxsmm_meltw_cbiasact_flags fusion_flags;
+            int l_flags = ( LIBXSMM_GEMM_VNNI_FLAGS('N', 'N', 'V', 'N') ) | LIBXSMM_GEMM_FLAG_NO_RESET_TILECONFIG | LIBXSMM_GEMM_FLAG_NO_SETUP_TILECONFIG;
+            int l_tc_flags = LIBXSMM_GEMM_FLAG_NO_RESET_TILECONFIG | ( LIBXSMM_GEMM_VNNI_FLAGS('N', 'N', 'V', 'N') );
+            libxsmm_blasint unroll_hint = (handle->desc.C/handle->bc)/handle->fwd_bf;
+            handle->gemm_fwd.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd_unroll(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &lda, &ldb, &ldc, &alpha, &beta, &l_flags, NULL);
+            handle->gemm_fwd2.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd_unroll(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+            handle->fwd_config_kernel = libxsmm_bsmmdispatch(handle->bk, handle->bn, handle->bc, &lda, &ldb, &ldc, NULL, &beta, &l_tc_flags, NULL);
+
+            handle->gemm_fwd3.xgemm.bmrs = libxsmm_bmmdispatch_reducebatch_strd_unroll(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+
+            fusion_flags = LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_OVERWRITE_C;
+            handle->gemm_fwd4.xgemm.bmrs_scbiasact = libxsmm_bmmdispatch_reducebatch_strd_scbiasact_unroll(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, fusion_flags, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+            fusion_flags = LIBXSMM_MELTW_FLAG_CBIASACT_ACT_RELU_OVERWRITE_C;
+            handle->gemm_fwd5.xgemm.bmrs_scbiasact = libxsmm_bmmdispatch_reducebatch_strd_scbiasact_unroll(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, fusion_flags, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+            fusion_flags = LIBXSMM_MELTW_FLAG_CBIASACT_ACT_SIGM_OVERWRITE_C;
+            handle->gemm_fwd6.xgemm.bmrs_scbiasact = libxsmm_bmmdispatch_reducebatch_strd_scbiasact_unroll(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, fusion_flags, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+            fusion_flags = LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_RELU_OVERWRITE_C;
+            handle->gemm_fwd7.xgemm.bmrs_scbiasact = libxsmm_bmmdispatch_reducebatch_strd_scbiasact_unroll(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, fusion_flags, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+            fusion_flags = LIBXSMM_MELTW_FLAG_CBIASACT_COLBIAS_ACT_SIGM_OVERWRITE_C;
+            handle->gemm_fwd8.xgemm.bmrs_scbiasact = libxsmm_bmmdispatch_reducebatch_strd_scbiasact_unroll(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, fusion_flags, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+
+            /* Also JIT eltwise functions... */
+            handle->fwd_cvtfp32bf16_kernel          = libxsmm_dispatch_meltw_cvtfp32bf16(handle->bk, handle->bn, &ldc, &ldc, LIBXSMM_DATATYPE_F32, LIBXSMM_DATATYPE_BF16);
+            handle->fwd_cvtfp32bf16_relu_kernel     = libxsmm_dispatch_meltw_cvtfp32bf16_act(handle->bk, handle->bn, &ldc, &ldc, LIBXSMM_DATATYPE_F32, LIBXSMM_DATATYPE_BF16, LIBXSMM_MELTW_FLAG_CVTA_FUSE_RELU);
+            handle->fwd_sigmoid_cvtfp32bf16_kernel  = libxsmm_dispatch_meltw_act_cvtfp32bf16(handle->bk, handle->bn, &ldc, &ldc, LIBXSMM_DATATYPE_F32, LIBXSMM_DATATYPE_BF16, LIBXSMM_MELTW_FLAG_ACVT_FUSE_SIGM);
           } else {
-            /* should not happen */
+            handle->gemm_fwd.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
+            handle->gemm_fwd2.xgemm.bmrs = libxsmm_bmmdispatch_reducebatch_strd(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), &lda, &ldb, &ldc, &alpha, &zerobeta, NULL, NULL);
+            handle->gemm_fwd3.xgemm.bmrs = libxsmm_bmmdispatch_reducebatch_strd(handle->bk, handle->bn, handle->bc, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
+          }
+
+          /* Special bwd kernels for K == 1 */
+          if (handle->desc.K == 1) {
+            libxsmm_blasint _bk = 2;
+            handle->gemm_bwd.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd(handle->bc, handle->bn, _bk, _bk*handle->bc*sizeof(libxsmm_bfloat16), _bk*handle->bn*sizeof(libxsmm_bfloat16), &ldb, &_bk, &ldb, &alpha, &beta, NULL, NULL);
+            handle->gemm_bwd2.xgemm.bmrs = libxsmm_bmmdispatch_reducebatch_strd(handle->bc, handle->bn, _bk, _bk*handle->bc*sizeof(libxsmm_bfloat16), _bk*handle->bn*sizeof(libxsmm_bfloat16), &ldb, &_bk, &ldb, &alpha, &zerobeta, NULL, NULL);
+          } else {
+            if (libxsmm_target_archid == LIBXSMM_X86_AVX512_SPR) {
+              int l_flags = ( LIBXSMM_GEMM_VNNI_FLAGS('N', 'N', 'V', 'N') ) | LIBXSMM_GEMM_FLAG_NO_RESET_TILECONFIG | LIBXSMM_GEMM_FLAG_NO_SETUP_TILECONFIG;
+              int l_tc_flags = LIBXSMM_GEMM_FLAG_NO_RESET_TILECONFIG | ( LIBXSMM_GEMM_VNNI_FLAGS('N', 'N', 'V', 'N') );
+              libxsmm_blasint unroll_hint = (handle->desc.K/handle->bk)/handle->bwd_bf;
+              handle->gemm_bwd.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd_unroll(handle->bc, handle->bn, handle->bk, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bk*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &ldb, &lda, &ldb, &alpha, &beta, &l_flags, NULL);
+              handle->gemm_bwd2.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd_unroll(handle->bc, handle->bn, handle->bk, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bk*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &ldb, &lda, &ldb, &alpha, &zerobeta, &l_flags, NULL);
+              handle->bwd_config_kernel = libxsmm_bsmmdispatch(handle->bc, handle->bn, handle->bk, &ldb, &lda, &ldb, NULL, &beta, &l_tc_flags, NULL);
+              handle->gemm_bwd3.xgemm.bmrs = libxsmm_bmmdispatch_reducebatch_strd_unroll(handle->bc, handle->bn, handle->bk, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bk*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &ldb, &lda, &ldb, &alpha, &zerobeta, &l_flags, NULL);
+              /* Also JIT eltwise functions... */
+              handle->bwd_cvtfp32bf16_kernel  = libxsmm_dispatch_meltw_cvtfp32bf16(handle->bc, handle->bn, &ldb, &ldb, LIBXSMM_DATATYPE_F32, LIBXSMM_DATATYPE_BF16);
+            } else {
+              handle->gemm_bwd.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd(handle->bc, handle->bn, handle->bk, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bk*handle->bn*sizeof(libxsmm_bfloat16), &ldb, &lda, &ldb, &alpha, &beta, NULL, NULL);
+              handle->gemm_bwd2.xgemm.bmrs = libxsmm_bmmdispatch_reducebatch_strd(handle->bc, handle->bn, handle->bk, handle->bk*handle->bc*sizeof(libxsmm_bfloat16), handle->bk*handle->bn*sizeof(libxsmm_bfloat16), &ldb, &lda, &ldb, &alpha, &zerobeta, NULL, NULL);
+            }
+          }
+          lda = (libxsmm_blasint)handle->bk;
+          ldb = (libxsmm_blasint)handle->bn;
+          ldc = (libxsmm_blasint)handle->bk;
+          if (libxsmm_target_archid == LIBXSMM_X86_AVX512_SPR) {
+            int l_flags = ( LIBXSMM_GEMM_VNNI_FLAGS('N', 'N', 'V', 'N') ) | LIBXSMM_GEMM_FLAG_NO_RESET_TILECONFIG | LIBXSMM_GEMM_FLAG_NO_SETUP_TILECONFIG;
+            int l_tc_flags = LIBXSMM_GEMM_FLAG_NO_RESET_TILECONFIG | ( LIBXSMM_GEMM_VNNI_FLAGS('N', 'N', 'V', 'N') );
+            libxsmm_blasint unroll_hint = (handle->desc.N/handle->bn)/handle->upd_bf;
+            handle->gemm_upd.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd_unroll(M, N, handle->bn, handle->bk*handle->bn*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &lda, &ldb, &ldc, &alpha, &beta, &l_flags, NULL);
+            handle->gemm_upd2.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd_unroll(M, N, handle->bn, handle->bk*handle->bn*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+            handle->upd_config_kernel = libxsmm_bsmmdispatch(M, N, handle->bn, &lda, &ldb, &ldc, NULL, &beta, &l_tc_flags, NULL);
+            l_flags = l_flags | LIBXSMM_GEMM_FLAG_VNNI_C;
+            handle->gemm_upd3.xgemm.bmrs = libxsmm_bmmdispatch_reducebatch_strd_unroll(M, N, handle->bn, handle->bk*handle->bn*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), unroll_hint, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL);
+          } else {
+            handle->gemm_upd.xgemm.bsmrs = libxsmm_bsmmdispatch_reducebatch_strd(M, N, handle->bn, handle->bk*handle->bn*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), &lda, &ldb, &ldc, &alpha, &beta, NULL, NULL);
+            handle->gemm_upd2.xgemm.bmrs = libxsmm_bmmdispatch_reducebatch_strd(M, N, handle->bn, handle->bk*handle->bn*sizeof(libxsmm_bfloat16), handle->bc*handle->bn*sizeof(libxsmm_bfloat16), &lda, &ldb, &ldc, &alpha, &zerobeta, NULL, NULL);
+
           }
         } else {
 
@@ -287,8 +917,8 @@ LIBXSMM_API libxsmm_dnn_tensor_datalayout* libxsmm_dnn_fullyconnected_create_ten
           }
         } else if ((handle->desc.buffer_format & LIBXSMM_DNN_TENSOR_FORMAT_NHWC) > 0) {
           if ( ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_F32) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32)) ||
-               ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32)) ||
-               ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16))    ) {
+              ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32)) ||
+              ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16))    ) {
             layout->datatype = handle->desc.datatype_in;
             layout->dim_type = (libxsmm_dnn_tensor_dimtype*) malloc(4*sizeof(libxsmm_dnn_tensor_dimtype));
             layout->dim_size = (unsigned int*) malloc(4*sizeof(unsigned int));
@@ -323,7 +953,7 @@ LIBXSMM_API libxsmm_dnn_tensor_datalayout* libxsmm_dnn_fullyconnected_create_ten
           }
         } else if ((handle->desc.buffer_format & LIBXSMM_DNN_TENSOR_FORMAT_NCPACKED) > 0) {
           if ( ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_F32)  && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32)) ||
-               ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16))    ) {
+              ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16))    ) {
             layout->datatype = handle->desc.datatype_in;
             layout->dim_type = (libxsmm_dnn_tensor_dimtype*) malloc(4*sizeof(libxsmm_dnn_tensor_dimtype));
             layout->dim_size = (unsigned int*) malloc(4*sizeof(unsigned int));
@@ -400,7 +1030,7 @@ LIBXSMM_API libxsmm_dnn_tensor_datalayout* libxsmm_dnn_fullyconnected_create_ten
               *status = LIBXSMM_DNN_ERR_CREATE_LAYOUT_ARRAYS;
             }
           } else if ( ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16) ) ||
-                      ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32) )     ) {
+              ( (handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32) )     ) {
             layout->datatype = LIBXSMM_DNN_DATATYPE_BF16;
             layout->dim_type = (libxsmm_dnn_tensor_dimtype*) malloc(7*sizeof(libxsmm_dnn_tensor_dimtype));
             layout->dim_size = (unsigned int*) malloc(7*sizeof(unsigned int));
@@ -432,8 +1062,8 @@ LIBXSMM_API libxsmm_dnn_tensor_datalayout* libxsmm_dnn_fullyconnected_create_ten
           }
         } else if ((handle->desc.filter_format & LIBXSMM_DNN_TENSOR_FORMAT_RSCK) > 0) {
           if ( ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_F32) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32))   ||
-               ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32))  ||
-               ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16))    ) {
+              ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32))  ||
+              ((handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16) && (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16))    ) {
             layout->datatype = handle->desc.datatype_in;
             layout->dim_type = (libxsmm_dnn_tensor_dimtype*) malloc(4*sizeof(libxsmm_dnn_tensor_dimtype));
             layout->dim_size = (unsigned int*) malloc(4*sizeof(unsigned int));
@@ -528,6 +1158,60 @@ LIBXSMM_API libxsmm_dnn_tensor_datalayout* libxsmm_dnn_fullyconnected_create_ten
           layout = 0; /* make sure a NULL is returned */
           *status = LIBXSMM_DNN_ERR_INVALID_FORMAT_GENERAL;
         }
+      } else if ( (type == LIBXSMM_DNN_REGULAR_CHANNEL_BIAS) || (type == LIBXSMM_DNN_GRADIENT_CHANNEL_BIAS) || (type == LIBXSMM_DNN_CHANNEL_BIAS) ) {
+        layout->format = handle->desc.buffer_format;
+        layout->tensor_type = LIBXSMM_DNN_CHANNEL_SCALAR;
+
+        if ( ((handle->desc.buffer_format & LIBXSMM_DNN_TENSOR_FORMAT_NCPACKED) > 0) ) {
+          if ( (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_F32) || (handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16) ) {
+            layout->datatype = handle->desc.datatype_out;
+            layout->dim_type = (libxsmm_dnn_tensor_dimtype*) malloc(2*sizeof(libxsmm_dnn_tensor_dimtype));
+            layout->dim_size = (unsigned int*) malloc(2*sizeof(unsigned int));
+
+            if (0 != layout->dim_type && 0 != layout->dim_size) { /* TODO: handle the error */
+              layout->num_dims = 2;
+              layout->dim_type[0] = LIBXSMM_DNN_TENSOR_DIMTYPE_C;
+              layout->dim_type[1] = LIBXSMM_DNN_TENSOR_DIMTYPE_C;
+              layout->dim_size[0] = (unsigned int)handle->bk;
+              layout->dim_size[1] = (unsigned int)(handle->desc.K / handle->bk);
+            } else {
+              free(layout->dim_type);
+              free(layout->dim_size);
+              free(layout);
+              layout = 0; /* make sure a NULL is returned */
+              *status = LIBXSMM_DNN_ERR_CREATE_LAYOUT_ARRAYS;
+            }
+          }
+        } else {
+          free(layout);
+          layout = 0; /* make sure a NULL is returned */
+          *status = LIBXSMM_DNN_ERR_UNKNOWN_TENSOR_TYPE;
+        }
+      } else if ( (type == LIBXSMM_DNN_RELU_MASK) ) {
+        layout->format = handle->desc.buffer_format;
+        layout->tensor_type = LIBXSMM_DNN_RELU_MASK;
+
+        if ( ((handle->desc.buffer_format & LIBXSMM_DNN_TENSOR_FORMAT_NCPACKED) > 0) ) {
+          layout->datatype = LIBXSMM_DNN_DATATYPE_I8;
+          layout->dim_type = (libxsmm_dnn_tensor_dimtype*) malloc(1*sizeof(libxsmm_dnn_tensor_dimtype));
+          layout->dim_size = (unsigned int*) malloc(1*sizeof(unsigned int));
+
+          if (0 != layout->dim_type && 0 != layout->dim_size) {
+            layout->num_dims = 1;
+            layout->dim_type[0] = LIBXSMM_DNN_TENSOR_DIMTYPE_X;
+            layout->dim_size[0] = handle->desc.N * handle->desc.K;
+          } else {
+            free(layout->dim_type);
+            free(layout->dim_size);
+            free(layout);
+            layout = 0; /* make sure a NULL is returned */
+            *status = LIBXSMM_DNN_ERR_CREATE_LAYOUT_ARRAYS;
+          }
+        } else {
+          free(layout);
+          layout = 0; /* make sure a NULL is returned */
+          *status = LIBXSMM_DNN_ERR_UNKNOWN_TENSOR_TYPE;
+        }
       } else {
         free(layout);
         layout = 0; /* make sure a NULL is returned */
@@ -615,9 +1299,11 @@ LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_fullyconnected_bind_tensor(libxsmm_dnn
   libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
 
   /* check for tensor type */
-  if ( (type != LIBXSMM_DNN_REGULAR_INPUT)  && (type != LIBXSMM_DNN_GRADIENT_INPUT)  &&
-       (type != LIBXSMM_DNN_REGULAR_OUTPUT) && (type != LIBXSMM_DNN_GRADIENT_OUTPUT) &&
-       (type != LIBXSMM_DNN_REGULAR_FILTER) && (type != LIBXSMM_DNN_GRADIENT_FILTER)    ) {
+  if ( (type != LIBXSMM_DNN_REGULAR_INPUT)        && (type != LIBXSMM_DNN_GRADIENT_INPUT)        &&
+       (type != LIBXSMM_DNN_REGULAR_OUTPUT)       && (type != LIBXSMM_DNN_GRADIENT_OUTPUT)       &&
+       (type != LIBXSMM_DNN_REGULAR_FILTER)       && (type != LIBXSMM_DNN_GRADIENT_FILTER)       &&
+       (type != LIBXSMM_DNN_REGULAR_CHANNEL_BIAS) && (type != LIBXSMM_DNN_GRADIENT_CHANNEL_BIAS) &&
+       (type != LIBXSMM_DNN_RELU_MASK)  ) {
     status = LIBXSMM_DNN_ERR_UNKNOWN_TENSOR_TYPE;
     return status;
   }
@@ -638,6 +1324,12 @@ LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_fullyconnected_bind_tensor(libxsmm_dnn
         handle->reg_filter = (libxsmm_dnn_tensor*)tensor;
       } else if ( type == LIBXSMM_DNN_GRADIENT_FILTER ) {
         handle->grad_filter = (libxsmm_dnn_tensor*)tensor;
+      } else if ( type == LIBXSMM_DNN_REGULAR_CHANNEL_BIAS ) {
+        handle->reg_bias = (libxsmm_dnn_tensor*)tensor;
+      } else if ( type == LIBXSMM_DNN_GRADIENT_CHANNEL_BIAS ) {
+        handle->grad_bias = (libxsmm_dnn_tensor*)tensor;
+      } else if ( type == LIBXSMM_DNN_RELU_MASK ) {
+        handle->relumask = (libxsmm_dnn_tensor*)tensor;
       } else {
         /* cannot happen */
       }
@@ -661,9 +1353,11 @@ LIBXSMM_API libxsmm_dnn_tensor* libxsmm_dnn_fullyconnected_get_tensor(libxsmm_dn
   *status = LIBXSMM_DNN_SUCCESS;
 
   /* check for tensor type */
-  if ( (type != LIBXSMM_DNN_REGULAR_INPUT)  && (type != LIBXSMM_DNN_GRADIENT_INPUT)  &&
-       (type != LIBXSMM_DNN_REGULAR_OUTPUT) && (type != LIBXSMM_DNN_GRADIENT_OUTPUT) &&
-       (type != LIBXSMM_DNN_REGULAR_FILTER) && (type != LIBXSMM_DNN_GRADIENT_FILTER)    ) {
+  if ( (type != LIBXSMM_DNN_REGULAR_INPUT)        && (type != LIBXSMM_DNN_GRADIENT_INPUT)        &&
+       (type != LIBXSMM_DNN_REGULAR_OUTPUT)       && (type != LIBXSMM_DNN_GRADIENT_OUTPUT)       &&
+       (type != LIBXSMM_DNN_REGULAR_FILTER)       && (type != LIBXSMM_DNN_GRADIENT_FILTER)       &&
+       (type != LIBXSMM_DNN_REGULAR_CHANNEL_BIAS) && (type != LIBXSMM_DNN_GRADIENT_CHANNEL_BIAS) &&
+       (type != LIBXSMM_DNN_RELU_MASK)  ) {
     *status = LIBXSMM_DNN_ERR_UNKNOWN_TENSOR_TYPE;
     return return_tensor;
   }
@@ -681,6 +1375,12 @@ LIBXSMM_API libxsmm_dnn_tensor* libxsmm_dnn_fullyconnected_get_tensor(libxsmm_dn
       return_tensor = handle->reg_filter;
     } else if ( type == LIBXSMM_DNN_GRADIENT_FILTER ) {
       return_tensor = handle->grad_filter;
+    } else if ( type == LIBXSMM_DNN_REGULAR_CHANNEL_BIAS ) {
+      return_tensor = handle->reg_bias;
+    } else if ( type == LIBXSMM_DNN_GRADIENT_CHANNEL_BIAS ) {
+      return_tensor = handle->grad_bias;
+    } else if ( type == LIBXSMM_DNN_RELU_MASK ) {
+      return_tensor = handle->relumask;
     } else {
       /* cannot happen */
     }
@@ -696,9 +1396,11 @@ LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_fullyconnected_release_tensor(libxsmm_
   libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
 
   /* check for tensor type */
-  if ( (type != LIBXSMM_DNN_REGULAR_INPUT)  && (type != LIBXSMM_DNN_GRADIENT_INPUT)  &&
-       (type != LIBXSMM_DNN_REGULAR_OUTPUT) && (type != LIBXSMM_DNN_GRADIENT_OUTPUT) &&
-       (type != LIBXSMM_DNN_REGULAR_FILTER) && (type != LIBXSMM_DNN_GRADIENT_FILTER)    ) {
+  if ( (type != LIBXSMM_DNN_REGULAR_INPUT)        && (type != LIBXSMM_DNN_GRADIENT_INPUT)        &&
+       (type != LIBXSMM_DNN_REGULAR_OUTPUT)       && (type != LIBXSMM_DNN_GRADIENT_OUTPUT)       &&
+       (type != LIBXSMM_DNN_REGULAR_FILTER)       && (type != LIBXSMM_DNN_GRADIENT_FILTER)       &&
+       (type != LIBXSMM_DNN_REGULAR_CHANNEL_BIAS) && (type != LIBXSMM_DNN_GRADIENT_CHANNEL_BIAS) &&
+       (type != LIBXSMM_DNN_RELU_MASK)  ) {
     status = LIBXSMM_DNN_ERR_UNKNOWN_TENSOR_TYPE;
     return status;
   }
@@ -716,6 +1418,12 @@ LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_fullyconnected_release_tensor(libxsmm_
       handle->reg_filter = 0;
     } else if ( type == LIBXSMM_DNN_GRADIENT_FILTER ) {
       handle->grad_filter = 0;
+    } else if ( type == LIBXSMM_DNN_REGULAR_CHANNEL_BIAS ) {
+      handle->reg_bias = 0;
+    } else if ( type == LIBXSMM_DNN_GRADIENT_CHANNEL_BIAS ) {
+      handle->grad_bias = 0;
+    } else if ( type == LIBXSMM_DNN_RELU_MASK ) {
+      handle->relumask = 0;
     } else {
       /* cannot happen */
     }
@@ -728,7 +1436,7 @@ LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_fullyconnected_release_tensor(libxsmm_
 
 
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_fullyconnected_execute_st(libxsmm_dnn_fullyconnected* handle, libxsmm_dnn_compute_kind kind,
-  /*unsigned*/int start_thread, /*unsigned*/int tid) {
+    /*unsigned*/int start_thread, /*unsigned*/int tid) {
   libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
   LIBXSMM_UNUSED( start_thread );
   LIBXSMM_UNUSED( tid );
@@ -744,20 +1452,13 @@ LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_fullyconnected_execute_st(libxsmm_dnn_
           status = LIBXSMM_DNN_ERR_INVALID_FORMAT_FC;
         }
       } break;
-      case LIBXSMM_DNN_COMPUTE_KIND_BWD: {
+      case LIBXSMM_DNN_COMPUTE_KIND_BWD:
+      case LIBXSMM_DNN_COMPUTE_KIND_UPD:
+      case LIBXSMM_DNN_COMPUTE_KIND_BWDUPD: {
         if ( (handle->desc.buffer_format == LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM) && (handle->desc.filter_format == LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM) ) {
-          status = libxsmm_dnn_fullyconnected_st_bwd_custom( handle, start_thread, tid );
+          status = libxsmm_dnn_fullyconnected_st_bwdupd_custom( handle, kind, start_thread, tid );
         } else if ( (handle->desc.buffer_format == LIBXSMM_DNN_TENSOR_FORMAT_NCPACKED) && (handle->desc.filter_format == LIBXSMM_DNN_TENSOR_FORMAT_CKPACKED) ) {
-          status = libxsmm_dnn_fullyconnected_st_bwd_ncnc_kcck( handle, start_thread, tid );
-        } else {
-          status = LIBXSMM_DNN_ERR_INVALID_FORMAT_FC;
-        }
-      } break;
-      case LIBXSMM_DNN_COMPUTE_KIND_UPD: {
-        if ( (handle->desc.buffer_format == LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM) && (handle->desc.filter_format == LIBXSMM_DNN_TENSOR_FORMAT_LIBXSMM) ) {
-          status = libxsmm_dnn_fullyconnected_st_upd_custom( handle, start_thread, tid );
-        } else if ( (handle->desc.buffer_format == LIBXSMM_DNN_TENSOR_FORMAT_NCPACKED) && (handle->desc.filter_format == LIBXSMM_DNN_TENSOR_FORMAT_CKPACKED) ) {
-          status = libxsmm_dnn_fullyconnected_st_upd_ncnc_kcck( handle, start_thread, tid );
+          status = libxsmm_dnn_fullyconnected_st_bwdupd_ncnc_kcck( handle, kind, start_thread, tid );
         } else {
           status = LIBXSMM_DNN_ERR_INVALID_FORMAT_FC;
         }

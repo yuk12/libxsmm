@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 ###############################################################################
 # Copyright (c) Intel Corporation - All rights reserved.                      #
 # This file is part of the LIBXSMM library.                                   #
@@ -18,6 +18,7 @@ from opentuner import ConfigurationManipulator
 from opentuner import IntegerParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
+import json
 import time
 import sys
 import re
@@ -68,8 +69,8 @@ class TransposeTune(MeasurementInterface):
         end = max(self.args.end, self.mintilesize)
         run_cmd = (
             "CHECK=-1"  # repeatable runs
-            " LIBXSMM_XCOPY_M=" + str(self.granularity * cfg["M"]) +
-            " LIBXSMM_XCOPY_N=" + str(self.granularity * cfg["N"]) +
+            " LIBXSMM_TCOPY_M=" + str(self.granularity * cfg["M"]) +
+            " LIBXSMM_TCOPY_N=" + str(self.granularity * cfg["N"]) +
             " ./transpose.sh o" + " " + str(end) + " " + str(end) +
             " " + str(end) + " " + str(end) + " " + str(nruns) +
             " -" + str(begin))
@@ -77,7 +78,7 @@ class TransposeTune(MeasurementInterface):
         if (0 == run_result["returncode"]):
             match = re.search(
                 "\\s*duration:\\s+([0-9]+(\\.[0-9]*)*)",
-                run_result["stdout"])
+                str(run_result["stdout"]))
             assert(match is not None)
             mseconds = float(match.group(1)) / nruns
             assert(0 < mseconds)
@@ -99,7 +100,9 @@ class TransposeTune(MeasurementInterface):
             time.strftime("-%Y%m%d-%H%M%S") + ".json")
         print("Optimal block size written to " + filename +
               ": ", configuration.data)
-        self.manipulator().save_to_file(configuration.data, filename)
+        # self.manipulator().save_to_file(configuration.data, filename)
+        with open(filename, 'w') as fd:
+            json.dump(configuration.data, fd)
 
 
 if __name__ == "__main__":

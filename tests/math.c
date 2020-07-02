@@ -1,7 +1,22 @@
-#include <libxsmm.h>
-#include <stdlib.h>
-#include <stdio.h>
+/******************************************************************************
+* Copyright (c) Intel Corporation - All rights reserved.                      *
+* This file is part of the LIBXSMM library.                                   *
+*                                                                             *
+* For information on the license, see the LICENSE file.                       *
+* Further information: https://github.com/hfp/libxsmm/                        *
+* SPDX-License-Identifier: BSD-3-Clause                                       *
+******************************************************************************/
+/* Hans Pabst (Intel Corp.)
+******************************************************************************/
+#if !defined(INCLUDE_LIBXSMM_LAST)
+# include <libxsmm.h>
+# include <libxsmm_intrinsics_x86.h>
+#endif
 #include <math.h>
+#if defined(INCLUDE_LIBXSMM_LAST)
+# include <libxsmm.h>
+# include <libxsmm_intrinsics_x86.h>
+#endif
 
 #define N 1000000
 
@@ -56,13 +71,13 @@ int main(/*int argc, char* argv[]*/)
 
   for (i = 0; i < 256; ++i) {
     const float a = libxsmm_sexp2_u8((unsigned char)i);
-    const float b = LIBXSMM_EXP2F(i);
+    const float b = LIBXSMM_EXP2F((float)i);
     if (LIBXSMM_NEQ(a, b)) exit(EXIT_FAILURE);
   }
 
   for (i = -128; i < 127; ++i) {
     const float a = libxsmm_sexp2_i8((signed char)i);
-    const float b = LIBXSMM_EXP2F(i);
+    const float b = LIBXSMM_EXP2F((float)i);
     if (LIBXSMM_NEQ(a, b)) exit(EXIT_FAILURE);
   }
 
@@ -76,18 +91,14 @@ int main(/*int argc, char* argv[]*/)
 
     if (LIBXSMM_NEQ(LIBXSMM_ROUND((double)r1), LIBXSMM_ROUNDX(double, (double)r1))) exit(EXIT_FAILURE);
     if (LIBXSMM_NEQ(LIBXSMM_ROUND((double)r2), LIBXSMM_ROUNDX(double, (double)r2))) exit(EXIT_FAILURE);
-    if (LIBXSMM_NEQ(LIBXSMM_ROUND(r1), LIBXSMM_ROUNDX(double, r1))) exit(EXIT_FAILURE);
-    if (LIBXSMM_NEQ(LIBXSMM_ROUND(r2), LIBXSMM_ROUNDX(double, r2))) exit(EXIT_FAILURE);
-    if (LIBXSMM_NEQ(LIBXSMM_ROUND(rd), LIBXSMM_ROUNDX(double, rd))) exit(EXIT_FAILURE);
+    if (LIBXSMM_NEQ(LIBXSMM_ROUND((double)rd), LIBXSMM_ROUNDX(double, (double)rd))) exit(EXIT_FAILURE);
 
     if (LIBXSMM_NEQ(LIBXSMM_ROUNDF((float)r1), LIBXSMM_ROUNDX(float, (float)r1))) exit(EXIT_FAILURE);
     if (LIBXSMM_NEQ(LIBXSMM_ROUNDF((float)r2), LIBXSMM_ROUNDX(float, (float)r2))) exit(EXIT_FAILURE);
-    if (LIBXSMM_NEQ(LIBXSMM_ROUNDF(r1), LIBXSMM_ROUNDX(float, r1))) exit(EXIT_FAILURE);
-    if (LIBXSMM_NEQ(LIBXSMM_ROUNDF(r2), LIBXSMM_ROUNDX(float, r2))) exit(EXIT_FAILURE);
-    if (LIBXSMM_NEQ(LIBXSMM_ROUNDF(rd), LIBXSMM_ROUNDX(float, rd))) exit(EXIT_FAILURE);
+    if (LIBXSMM_NEQ(LIBXSMM_ROUNDF((float)rd), LIBXSMM_ROUNDX(float, (float)rd))) exit(EXIT_FAILURE);
 
     d1 = libxsmm_sexp2((float)rd);
-    d2 = LIBXSMM_EXP2F(rd);
+    d2 = LIBXSMM_EXP2F((float)rd);
     e1 = fabs(d1 - d2); e2 = fabs(d2);
     e3 = 0 < e2 ? (e1 / e2) : 0.0;
     if (1E-4 < LIBXSMM_MIN(e1, e3)) exit(EXIT_FAILURE);
@@ -100,7 +111,7 @@ int main(/*int argc, char* argv[]*/)
     if (a != b) exit(EXIT_FAILURE);
     d1 = libxsmm_ssqrt((float)fabs(rd));
     e1 = fabs(d1 * d1 - fabs(rd));
-    d2 = LIBXSMM_SQRTF(fabs(rd));
+    d2 = LIBXSMM_SQRTF((float)fabs(rd));
     e2 = fabs(d2 * d2 - fabs(rd));
     if (e2 < e1) {
       e3 = 0 < e2 ? (e1 / e2) : 0.f;
@@ -199,6 +210,21 @@ int main(/*int argc, char* argv[]*/)
     }
   }
 
+  { /* check LIBXSMM_UPDIV, LIBXSMM_UP and LIBXSMM_UP2 */
+    const int ai[] = { 0, 1, 3, 5, 127, 3000 };
+    const int ao[] = { 0, 1, 1, 1,  19,  429 };
+    const int bi[] = { 0, 1, 3, 5, 127, 3000 };
+    const int bo[] = { 0, 7, 7, 7, 133, 3003 };
+    const int ci[] = { 0, 1, 3, 5, 127, 3000 };
+    const int co[] = { 0, 8, 8, 8, 128, 3000 };
+    const int n = sizeof(ai) / sizeof(*ai);
+    for (i = 0; i < n; ++i) {
+      if (LIBXSMM_UPDIV(ai[i], 7) != ao[i]) exit(EXIT_FAILURE);
+      if (LIBXSMM_UP(   bi[i], 7) != bo[i]) exit(EXIT_FAILURE);
+      if (LIBXSMM_UP2(  ci[i], 8) != co[i]) exit(EXIT_FAILURE);
+    }
+  }
+
   { /* check GCD */
     const size_t a[] = { 0, 1, 0, 100, 10 };
     const size_t b[] = { 0, 0, 1, 10, 100 };
@@ -210,7 +236,7 @@ int main(/*int argc, char* argv[]*/)
   }
 
   { /* check prime factorization */
-    const unsigned int test[] = { 0, 1, 2, 3, 5, 7, 12, 13, 24, 32, 2057, 120, 14, 997 };
+    const unsigned int test[] = { 0, 1, 2, 3, 5, 7, 12, 13, 24, 32, 2057, 120, 14, 997, 65519u * 65521u };
     const int n = sizeof(test) / sizeof(*test);
     unsigned int fact[32];
     for (i = 0; i < n; ++i) {

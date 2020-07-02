@@ -9,29 +9,21 @@
 /* Rajkishore Barik, Alexander Heinecke, Ankush Mandal, Jason Sewall (Intel Corp.)
 ******************************************************************************/
 #include "libxsmm_dnn_convolution_weight_update.h"
-#include <libxsmm_intrinsics_x86.h>
 #include "libxsmm_main.h"
-#include <libxsmm.h>
-#include <stdio.h>
-
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <string.h>
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
 
 
 /* function prototypes for below implementations */
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_f32_f32(libxsmm_dnn_layer* handle, int start_thread, int tid);
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu(libxsmm_dnn_layer* handle, int start_thread, int tid);
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16(libxsmm_dnn_layer* handle, int start_thread, int tid);
+LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu_amx(libxsmm_dnn_layer* handle, int start_thread, int tid);
+LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_amx(libxsmm_dnn_layer* handle, int start_thread, int tid);
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_nhwc_custom_f32_f32(libxsmm_dnn_layer* handle, int start_thread, int tid);
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_nhwc_rsck_f32_f32(libxsmm_dnn_layer* handle, int start_thread, int tid);
 
+
 LIBXSMM_API_INLINE LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512_CORE)
-void transpose_32x16(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int ld_in, int ld_out)
+void transpose_32x16(const libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int ld_in, int ld_out)
 {
 #if defined(LIBXSMM_INTRINSICS_AVX512_CORE)
   __m512i r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, ra, rb, rc, rd, re, rf;
@@ -40,22 +32,22 @@ void transpose_32x16(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int ld_in, int
   const __m512i idx_lo         = _mm512_set_epi64(13, 12, 5, 4, 9, 8, 1, 0);
   const __m512i idx_hi         = _mm512_set_epi64(7, 6, 15, 14, 3, 2, 11, 10);
 
-  r0 = _mm512_load_epi32(in + 0*in_width);
-  r1 = _mm512_load_epi32(in + 1*in_width);
-  r2 = _mm512_load_epi32(in + 2*in_width);
-  r3 = _mm512_load_epi32(in + 3*in_width);
-  r4 = _mm512_load_epi32(in + 4*in_width);
-  r5 = _mm512_load_epi32(in + 5*in_width);
-  r6 = _mm512_load_epi32(in + 6*in_width);
-  r7 = _mm512_load_epi32(in + 7*in_width);
-  r8 = _mm512_load_epi32(in + 8*in_width);
-  r9 = _mm512_load_epi32(in + 9*in_width);
-  ra = _mm512_load_epi32(in + 10*in_width);
-  rb = _mm512_load_epi32(in + 11*in_width);
-  rc = _mm512_load_epi32(in + 12*in_width);
-  rd = _mm512_load_epi32(in + 13*in_width);
-  re = _mm512_load_epi32(in + 14*in_width);
-  rf = _mm512_load_epi32(in + 15*in_width);
+  r0 = _mm512_loadu_si512(in + 0*in_width);
+  r1 = _mm512_loadu_si512(in + 1*in_width);
+  r2 = _mm512_loadu_si512(in + 2*in_width);
+  r3 = _mm512_loadu_si512(in + 3*in_width);
+  r4 = _mm512_loadu_si512(in + 4*in_width);
+  r5 = _mm512_loadu_si512(in + 5*in_width);
+  r6 = _mm512_loadu_si512(in + 6*in_width);
+  r7 = _mm512_loadu_si512(in + 7*in_width);
+  r8 = _mm512_loadu_si512(in + 8*in_width);
+  r9 = _mm512_loadu_si512(in + 9*in_width);
+  ra = _mm512_loadu_si512(in + 10*in_width);
+  rb = _mm512_loadu_si512(in + 11*in_width);
+  rc = _mm512_loadu_si512(in + 12*in_width);
+  rd = _mm512_loadu_si512(in + 13*in_width);
+  re = _mm512_loadu_si512(in + 14*in_width);
+  rf = _mm512_loadu_si512(in + 15*in_width);
 
   t0 = _mm512_unpacklo_epi16(r0,r1);
   t1 = _mm512_unpackhi_epi16(r0,r1);
@@ -180,7 +172,7 @@ void transpose_32x16(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int ld_in, int
 }
 
 LIBXSMM_API_INLINE LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512_CORE)
-void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int ld_in, int ld_out)
+void transpose_32xcols(const libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int ld_in, int ld_out)
 {
 #if defined(LIBXSMM_INTRINSICS_AVX512_CORE)
   __m512i r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, ra, rb, rc, rd, re, rf;
@@ -192,101 +184,101 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
 
   rf = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
   if (col == 15) {
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
-    r7 = _mm512_load_epi32(in + 7*in_width);
-    r8 = _mm512_load_epi32(in + 8*in_width);
-    r9 = _mm512_load_epi32(in + 9*in_width);
-    ra = _mm512_load_epi32(in + 10*in_width);
-    rb = _mm512_load_epi32(in + 11*in_width);
-    rc = _mm512_load_epi32(in + 12*in_width);
-    rd = _mm512_load_epi32(in + 13*in_width);
-    re = _mm512_load_epi32(in + 14*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
+    r7 = _mm512_loadu_si512(in + 7*in_width);
+    r8 = _mm512_loadu_si512(in + 8*in_width);
+    r9 = _mm512_loadu_si512(in + 9*in_width);
+    ra = _mm512_loadu_si512(in + 10*in_width);
+    rb = _mm512_loadu_si512(in + 11*in_width);
+    rc = _mm512_loadu_si512(in + 12*in_width);
+    rd = _mm512_loadu_si512(in + 13*in_width);
+    re = _mm512_loadu_si512(in + 14*in_width);
   } else if (col == 14) {
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
-    r7 = _mm512_load_epi32(in + 7*in_width);
-    r8 = _mm512_load_epi32(in + 8*in_width);
-    r9 = _mm512_load_epi32(in + 9*in_width);
-    ra = _mm512_load_epi32(in + 10*in_width);
-    rb = _mm512_load_epi32(in + 11*in_width);
-    rc = _mm512_load_epi32(in + 12*in_width);
-    rd = _mm512_load_epi32(in + 13*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
+    r7 = _mm512_loadu_si512(in + 7*in_width);
+    r8 = _mm512_loadu_si512(in + 8*in_width);
+    r9 = _mm512_loadu_si512(in + 9*in_width);
+    ra = _mm512_loadu_si512(in + 10*in_width);
+    rb = _mm512_loadu_si512(in + 11*in_width);
+    rc = _mm512_loadu_si512(in + 12*in_width);
+    rd = _mm512_loadu_si512(in + 13*in_width);
   } else if (col == 13) {
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
-    r7 = _mm512_load_epi32(in + 7*in_width);
-    r8 = _mm512_load_epi32(in + 8*in_width);
-    r9 = _mm512_load_epi32(in + 9*in_width);
-    ra = _mm512_load_epi32(in + 10*in_width);
-    rb = _mm512_load_epi32(in + 11*in_width);
-    rc = _mm512_load_epi32(in + 12*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
+    r7 = _mm512_loadu_si512(in + 7*in_width);
+    r8 = _mm512_loadu_si512(in + 8*in_width);
+    r9 = _mm512_loadu_si512(in + 9*in_width);
+    ra = _mm512_loadu_si512(in + 10*in_width);
+    rb = _mm512_loadu_si512(in + 11*in_width);
+    rc = _mm512_loadu_si512(in + 12*in_width);
   } else if (col == 12) {
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
-    r7 = _mm512_load_epi32(in + 7*in_width);
-    r8 = _mm512_load_epi32(in + 8*in_width);
-    r9 = _mm512_load_epi32(in + 9*in_width);
-    ra = _mm512_load_epi32(in + 10*in_width);
-    rb = _mm512_load_epi32(in + 11*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
+    r7 = _mm512_loadu_si512(in + 7*in_width);
+    r8 = _mm512_loadu_si512(in + 8*in_width);
+    r9 = _mm512_loadu_si512(in + 9*in_width);
+    ra = _mm512_loadu_si512(in + 10*in_width);
+    rb = _mm512_loadu_si512(in + 11*in_width);
   } else if (col == 11) {
     rb = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
-    r7 = _mm512_load_epi32(in + 7*in_width);
-    r8 = _mm512_load_epi32(in + 8*in_width);
-    r9 = _mm512_load_epi32(in + 9*in_width);
-    ra = _mm512_load_epi32(in + 10*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
+    r7 = _mm512_loadu_si512(in + 7*in_width);
+    r8 = _mm512_loadu_si512(in + 8*in_width);
+    r9 = _mm512_loadu_si512(in + 9*in_width);
+    ra = _mm512_loadu_si512(in + 10*in_width);
   } else if (col == 10) {
     ra = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rb = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
-    r7 = _mm512_load_epi32(in + 7*in_width);
-    r8 = _mm512_load_epi32(in + 8*in_width);
-    r9 = _mm512_load_epi32(in + 9*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
+    r7 = _mm512_loadu_si512(in + 7*in_width);
+    r8 = _mm512_loadu_si512(in + 8*in_width);
+    r9 = _mm512_loadu_si512(in + 9*in_width);
   } else if (col == 9) {
     r9 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     ra = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -294,15 +286,15 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
-    r7 = _mm512_load_epi32(in + 7*in_width);
-    r8 = _mm512_load_epi32(in + 8*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
+    r7 = _mm512_loadu_si512(in + 7*in_width);
+    r8 = _mm512_loadu_si512(in + 8*in_width);
   } else if (col == 8) {
     r8 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r9 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -311,14 +303,14 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
-    r7 = _mm512_load_epi32(in + 7*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
+    r7 = _mm512_loadu_si512(in + 7*in_width);
   } else if (col == 7) {
     r7 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r8 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -328,13 +320,13 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
-    r6 = _mm512_load_epi32(in + 6*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
+    r6 = _mm512_loadu_si512(in + 6*in_width);
   } else if (col == 6) {
     r6 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r7 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -345,12 +337,12 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
-    r5 = _mm512_load_epi32(in + 5*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
+    r5 = _mm512_loadu_si512(in + 5*in_width);
   } else if (col == 5) {
     r5 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r6 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -362,11 +354,11 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
-    r4 = _mm512_load_epi32(in + 4*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
+    r4 = _mm512_loadu_si512(in + 4*in_width);
   } else if (col == 4) {
     r4 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r5 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -379,10 +371,10 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
-    r3 = _mm512_load_epi32(in + 3*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
+    r3 = _mm512_loadu_si512(in + 3*in_width);
   } else if (col == 3) {
     r3 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r4 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -396,9 +388,9 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
-    r2 = _mm512_load_epi32(in + 2*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
+    r2 = _mm512_loadu_si512(in + 2*in_width);
   } else if (col == 2) {
     r2 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r3 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -413,8 +405,8 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
-    r1 = _mm512_load_epi32(in + 1*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
+    r1 = _mm512_loadu_si512(in + 1*in_width);
   } else if (col == 1) {
     r1 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r2 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -430,7 +422,7 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
     rc = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     rd = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     re = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
-    r0 = _mm512_load_epi32(in + 0*in_width);
+    r0 = _mm512_loadu_si512(in + 0*in_width);
   } else {
     r0 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
     r1 = LIBXSMM_INTRINSICS_MM512_UNDEFINED_EPI32();
@@ -572,7 +564,7 @@ void transpose_32xcols(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int col, int
 }
 
 LIBXSMM_API_INLINE LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512_CORE)
-void transpose_input_pixels_bf16(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int M, int N, int ld_in, int ld_out){
+void transpose_input_pixels_bf16(const libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, int M, int N, int ld_in, int ld_out){
 #if defined(LIBXSMM_INTRINSICS_AVX512_CORE)
   int i, j;
   int full16_chunks = N/16;
@@ -582,14 +574,14 @@ void transpose_input_pixels_bf16(libxsmm_bfloat16 *in, libxsmm_bfloat16 *out, in
   if (full16_chunks) {
     for (i=0; i<M; i+=32) {
       for (j=0; j<_N; j+=16) {
-        transpose_32x16((libxsmm_bfloat16*)in + i + ld_in*j, (libxsmm_bfloat16*)out + j + i*ld_out, ld_in, ld_out);
+        transpose_32x16((const libxsmm_bfloat16*)in + i + ld_in*j, (libxsmm_bfloat16*)out + j + i*ld_out, ld_in, ld_out);
       }
     }
   }
 
   if (remainder_cols) {
     for (i=0; i<M; i+=32) {
-      transpose_32xcols((libxsmm_bfloat16*)in + i + ld_in*full16_chunks*16, (libxsmm_bfloat16*)out + full16_chunks*16 + i*ld_out, remainder_cols, ld_in, ld_out);
+      transpose_32xcols((const libxsmm_bfloat16*)in + i + ld_in*full16_chunks*16, (libxsmm_bfloat16*)out + full16_chunks*16 + i*ld_out, remainder_cols, ld_in, ld_out);
     }
   }
 #else
@@ -625,8 +617,14 @@ libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu(libxsm
   typedef libxsmm_bfloat16 element_output_type;
   typedef libxsmm_bfloat16 element_filter_type;
   typedef libxsmm_bsmmfunction gemm_function;
+
+  /* some portable macrros fof BF16 <-> FP32 */
+# include "template/libxsmm_dnn_bf16_macros_define.tpl.c"
+
   typedef libxsmm_bsmmfunction_reducebatch_addr gemm_br_function;
 # include "template/libxsmm_dnn_convolve_st_upd_custom_custom_generic_bf16.tpl.c"
+
+# include "template/libxsmm_dnn_bf16_macros_undefine.tpl.c"
 #else /* should not happen */
   LIBXSMM_UNUSED(handle); LIBXSMM_UNUSED(start_thread); LIBXSMM_UNUSED(tid);
   status = LIBXSMM_DNN_ERR_UNSUPPORTED_ARCH;
@@ -634,6 +632,32 @@ libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu(libxsm
   return status;
 }
 
+LIBXSMM_API_INTERN LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512_CORE)
+libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu_amx(libxsmm_dnn_layer* handle, int start_thread, int tid)
+{
+  libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
+#if defined(LIBXSMM_INTRINSICS_AVX512_CORE) /*__AVX512F__,__AVX512BW__,__AVX512DQ__*/
+  typedef libxsmm_bfloat16 element_input_type;
+  typedef libxsmm_bfloat16 element_output_type;
+  typedef libxsmm_bfloat16 element_filter_type;
+  typedef libxsmm_bsmmfunction gemm_function;
+
+  /* some portable macrros fof BF16 <-> FP32 */
+# include "template/libxsmm_dnn_bf16_macros_define.tpl.c"
+
+  typedef libxsmm_bsmmfunction_reducebatch_strd gemm_br_function;
+  gemm_function tile_config_kernel = handle->upd_config_kernel;
+  gemm_function gemm_kernel = NULL;
+  gemm_br_function br_gemm_kernel = NULL;
+# include "template/libxsmm_dnn_convolve_st_upd_custom_custom_generic_bf16_amx.tpl.c"
+
+# include "template/libxsmm_dnn_bf16_macros_undefine.tpl.c"
+#else /* should not happen */
+  LIBXSMM_UNUSED(handle); LIBXSMM_UNUSED(start_thread); LIBXSMM_UNUSED(tid);
+  status = LIBXSMM_DNN_ERR_UNSUPPORTED_ARCH;
+#endif
+  return status;
+}
 
 #if defined(LIBXSMM_INTRINSICS_AVX512_CPX)
 LIBXSMM_API_INTERN LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512_CPX)
@@ -645,10 +669,16 @@ libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16(libxsmm_dn
   typedef libxsmm_bfloat16 element_output_type;
   typedef libxsmm_bfloat16 element_filter_type;
   typedef libxsmm_bsmmfunction gemm_function;
+
+#define LIBXSMM_DNN_BF16_USE_CPX_AVX512_NI
+  /* some portable macrros fof BF16 <-> FP32 */
+# include "template/libxsmm_dnn_bf16_macros_define.tpl.c"
+
   typedef libxsmm_bsmmfunction_reducebatch_addr gemm_br_function;
-#define LIBXSMM_DNN_CONVOLUTION_UPD_AVX512_CPX
 # include "template/libxsmm_dnn_convolve_st_upd_custom_custom_generic_bf16.tpl.c"
-#undef LIBXSMM_DNN_CONVOLUTION_UPD_AVX512_CPX
+
+# include "template/libxsmm_dnn_bf16_macros_undefine.tpl.c"
+#undef LIBXSMM_DNN_BF16_USE_CPX_AVX512_NI
 #else /* should not happen */
   LIBXSMM_UNUSED(handle); LIBXSMM_UNUSED(start_thread); LIBXSMM_UNUSED(tid);
   status = LIBXSMM_DNN_ERR_UNSUPPORTED_ARCH;
@@ -660,6 +690,43 @@ LIBXSMM_API_INTERN LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512_CORE)
 libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16(libxsmm_dnn_layer* handle, int start_thread, int tid)
 {
   return libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu( handle, start_thread, tid );
+}
+#endif
+
+#if defined(LIBXSMM_INTRINSICS_AVX512_CPX)
+LIBXSMM_API_INTERN LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512_CPX)
+libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_amx(libxsmm_dnn_layer* handle, int start_thread, int tid)
+{
+  libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
+#if defined(LIBXSMM_INTRINSICS_AVX512_CPX) /*__AVX512F__,__AVX512BW__,__AVX512DQ__,__AVX512BF16__*/
+  typedef libxsmm_bfloat16 element_input_type;
+  typedef libxsmm_bfloat16 element_output_type;
+  typedef libxsmm_bfloat16 element_filter_type;
+  typedef libxsmm_bsmmfunction gemm_function;
+
+#define LIBXSMM_DNN_BF16_USE_CPX_AVX512_NI
+  /* some portable macrros fof BF16 <-> FP32 */
+# include "template/libxsmm_dnn_bf16_macros_define.tpl.c"
+
+  typedef libxsmm_bsmmfunction_reducebatch_strd gemm_br_function;
+  gemm_function tile_config_kernel = handle->upd_config_kernel;
+  gemm_function gemm_kernel = NULL;
+  gemm_br_function br_gemm_kernel = NULL;
+# include "template/libxsmm_dnn_convolve_st_upd_custom_custom_generic_bf16_amx.tpl.c"
+
+# include "template/libxsmm_dnn_bf16_macros_undefine.tpl.c"
+#undef LIBXSMM_DNN_BF16_USE_CPX_AVX512_NI
+#else /* should not happen */
+  LIBXSMM_UNUSED(handle); LIBXSMM_UNUSED(start_thread); LIBXSMM_UNUSED(tid);
+  status = LIBXSMM_DNN_ERR_UNSUPPORTED_ARCH;
+#endif
+  return status;
+}
+#else
+LIBXSMM_API_INTERN LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512_CORE)
+libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_amx(libxsmm_dnn_layer* handle, int start_thread, int tid)
+{
+  return libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu_amx( handle, start_thread, tid );
 }
 #endif
 
@@ -711,13 +778,7 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom(l
   libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
 
   /* check if we have input, output and filter */
-  if (handle->reg_input == 0 || handle->grad_output == 0 || handle->grad_filter == 0 || handle->scratch3 == 0) {
-    status = LIBXSMM_DNN_ERR_DATA_NOT_BOUND;
-    return status;
-  }
-
-  /* check if we scratch for MB parallel execution */
-  if ( (handle->upd_use_thread_fil == 1) && (handle->scratch4 == 0) ) {
+  if (handle->reg_input == 0 || handle->grad_output == 0 || handle->grad_filter == 0 || handle->scratch == 0) {
     status = LIBXSMM_DNN_ERR_DATA_NOT_BOUND;
     return status;
   }
@@ -731,12 +792,16 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_custom_custom(l
 #if defined(LIBXSMM_INTRINSICS_AVX512_CPX) /*__AVX512F__,__AVX512BW__,__AVX512DQ__,__AVX512BF16__*/
     else if ( handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16 && handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16 && libxsmm_target_archid >= LIBXSMM_X86_AVX512_CORE && libxsmm_target_archid < LIBXSMM_X86_AVX512_CPX ) {
       status = libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu( handle, start_thread, tid);
-    } else if ( handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16 && handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16 && libxsmm_target_archid >= LIBXSMM_X86_AVX512_CPX ) {
+    } else if ( handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16 && handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16 && libxsmm_target_archid >= LIBXSMM_X86_AVX512_CPX && libxsmm_target_archid < LIBXSMM_X86_AVX512_SPR) {
       status = libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16( handle, start_thread, tid);
+    } else if ( handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16 && handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16 && libxsmm_target_archid >= LIBXSMM_X86_AVX512_SPR) {
+      status = libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_amx( handle, start_thread, tid);
     }
 #elif defined(LIBXSMM_INTRINSICS_AVX512_CORE) /*__AVX512F__,__AVX512BW__,__AVX512DQ__*/
-    else if ( handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16 && handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16 && libxsmm_target_archid >= LIBXSMM_X86_AVX512_CORE ) {
+    else if ( handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16 && handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16 && libxsmm_target_archid >= LIBXSMM_X86_AVX512_CORE && libxsmm_target_archid < LIBXSMM_X86_AVX512_SPR) {
       status = libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu( handle, start_thread, tid);
+    } else if ( handle->desc.datatype_in == LIBXSMM_DNN_DATATYPE_BF16 && handle->desc.datatype_out == LIBXSMM_DNN_DATATYPE_BF16 && libxsmm_target_archid >= LIBXSMM_X86_AVX512_SPR) {
+      status = libxsmm_dnn_convolve_st_upd_custom_custom_bf16_bf16_emu_amx( handle, start_thread, tid);
     }
 #endif
     else {
@@ -769,13 +834,7 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_nhwc_custom(lib
   libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
 
   /* check if we have input, output and filter */
-  if (handle->reg_input == 0 || handle->grad_output == 0 || handle->grad_filter == 0 || handle->scratch3 == 0) {
-    status = LIBXSMM_DNN_ERR_DATA_NOT_BOUND;
-    return status;
-  }
-
-  /* check if we scratch for MB parallel execution */
-  if ( (handle->upd_use_thread_fil == 1) && (handle->scratch4 == 0) ) {
+  if (handle->reg_input == 0 || handle->grad_output == 0 || handle->grad_filter == 0 || handle->scratch == 0) {
     status = LIBXSMM_DNN_ERR_DATA_NOT_BOUND;
     return status;
   }
@@ -817,13 +876,7 @@ LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_convolve_st_upd_nhwc_rsck(libxs
   libxsmm_dnn_err_t status = LIBXSMM_DNN_SUCCESS;
 
   /* check if we have input, output and filter */
-  if (handle->reg_input == 0 || handle->grad_output == 0 || handle->grad_filter == 0 || handle->scratch3 == 0) {
-    status = LIBXSMM_DNN_ERR_DATA_NOT_BOUND;
-    return status;
-  }
-
-  /* check if we scratch for MB parallel execution */
-  if ( (handle->upd_use_thread_fil == 1) && (handle->scratch4 == 0) ) {
+  if (handle->reg_input == 0 || handle->grad_output == 0 || handle->grad_filter == 0 || handle->scratch == 0) {
     status = LIBXSMM_DNN_ERR_DATA_NOT_BOUND;
     return status;
   }

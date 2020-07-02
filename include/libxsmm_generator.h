@@ -83,6 +83,18 @@ LIBXSMM_API libxsmm_mcopy_descriptor* libxsmm_mcopy_descriptor_init(libxsmm_desc
   unsigned int typesize, unsigned int m, unsigned int n, unsigned int ldo,
   unsigned int ldi, int flags, int prefetch, const int* unroll);
 
+/** Initialize transpose descriptor as used by low-level routines. */
+LIBXSMM_API libxsmm_meltw_descriptor* libxsmm_meltw_descriptor_init(libxsmm_descriptor_blob* blob,
+  libxsmm_datatype in_type, libxsmm_datatype out_type,
+  libxsmm_blasint m, libxsmm_blasint n,
+  libxsmm_blasint ldo, libxsmm_blasint ldi,
+  int flags, int operation);
+LIBXSMM_API libxsmm_meltw_descriptor* libxsmm_meltw_descriptor_init2(libxsmm_descriptor_blob* blob,
+  libxsmm_datatype in_type, libxsmm_datatype in2_type, libxsmm_datatype out_type, libxsmm_datatype out2_type,
+  libxsmm_blasint m, libxsmm_blasint n,
+  libxsmm_blasint ldo, libxsmm_blasint ldi, libxsmm_blasint ldx, libxsmm_blasint ldy,
+  int flags, int operation);
+
 /** Initialize packed trsm descriptor as used by low-level routines. */
 LIBXSMM_API libxsmm_trsm_descriptor* libxsmm_trsm_descriptor_init(libxsmm_descriptor_blob* blob,
   unsigned int typesize, libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint lda, libxsmm_blasint ldb,
@@ -190,7 +202,8 @@ void libxsmm_generator_spgemm_csr_soa_kernel(libxsmm_generated_code*        io_g
                                              const char*                    i_arch,
                                              const unsigned int*            i_row_idx,
                                              const unsigned int*            i_column_idx,
-                                             const void*                    i_values);
+                                             const void*                    i_values,
+                                             const unsigned int             i_packed_width );
 
 /* @TODO change int based architecture value */
 LIBXSMM_API
@@ -199,7 +212,8 @@ void libxsmm_generator_spgemm_csc_soa_kernel( libxsmm_generated_code*        io_
                                               const char*                    i_arch,
                                               const unsigned int*            i_row_idx,
                                               const unsigned int*            i_column_idx,
-                                              const void*                    i_values );
+                                              const void*                    i_values,
+                                              const unsigned int             i_packed_width );
 
 /* @TODO change int based architecture value */
 LIBXSMM_API void libxsmm_generator_packed_gemm_ac_rm( libxsmm_generated_code*         io_generated_code,
@@ -240,14 +254,22 @@ void libxsmm_generator_matcopy_kernel( libxsmm_generated_code*            io_gen
                                        const char*                        i_arch );
 
 LIBXSMM_API
+void libxsmm_generator_mateltwise_kernel( libxsmm_generated_code*            io_generated_code,
+                                          const libxsmm_meltw_descriptor*    i_mateltw_desc );
+
+LIBXSMM_API
 void libxsmm_generator_transpose_kernel( libxsmm_generated_code*          io_generated_code,
                                          const libxsmm_trans_descriptor*  i_trans_desc,
                                          int                              i_arch );
 
 /** Initialization counter that can be used to check whether the library is initialized (!=0) or not (==0). */
-LIBXSMM_APIVAR_ALIGNED(unsigned int libxsmm_ninit);
+LIBXSMM_APIVAR_PUBLIC(unsigned int libxsmm_ninit);
+/** Target architecture (libxsmm_get_target_archid, libxsmm_set_target_archid). */
+LIBXSMM_APIVAR_PUBLIC(int libxsmm_target_archid);
 /** Verbosity level (0: quiet, 1: errors, 2: warnings, 3: info, neg.: all/dump). */
-LIBXSMM_APIVAR_ALIGNED(int libxsmm_verbosity);
+LIBXSMM_APIVAR_PUBLIC(int libxsmm_verbosity);
+/** Security-enhanced environment. */
+LIBXSMM_APIVAR_PUBLIC(int libxsmm_se);
 
 #endif /*LIBXSMM_GENERATOR_H*/
 

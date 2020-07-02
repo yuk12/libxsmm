@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 ###############################################################################
 # Copyright (c) Intel Corporation - All rights reserved.                      #
 # This file is part of the LIBXSMM library.                                   #
@@ -29,7 +29,7 @@ if __name__ == "__main__":
         cacheline = 64
         prefetch = -1
         wrap = 1
-        malloc = -1
+        malloc = 0
         mnklist = list()
 
         # optional argument(s)

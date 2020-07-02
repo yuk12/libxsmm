@@ -11,10 +11,10 @@
 int img, ofm1, ofm2, ifm1, ifm2, oj, oi, kj, ki, oi_use, oj_use, ii_use, ij_use, ofmb, ifmb, ojb, myIfmId, nIfmBlocks, ind, /*task,*/ ifm1ofm1;
 /* computing first logical thread */
 const int ltid = tid - start_thread;
-int imgpt = (handle->desc.N + handle->desc.threads - 1)/handle->desc.threads;
+int imgpt = LIBXSMM_UPDIV(handle->desc.N, handle->desc.threads);
 int threads_per_image = handle->desc.threads / handle->desc.N;
-int my_img_start = LIBXSMM_MIN( ltid * imgpt, handle->desc.N);
-int my_img_end = LIBXSMM_MIN( (ltid+1) * imgpt, handle->desc.N);
+int my_img_start = LIBXSMM_MIN(ltid * imgpt, handle->desc.N);
+int my_img_end = LIBXSMM_MIN((ltid+1) * imgpt, handle->desc.N);
 int my_ifm_start = 0;
 int my_ifm_end = handle->blocksifm;
 
@@ -33,7 +33,7 @@ int transpose_thr_end = ((ltid + 1) * transpose_chunksize < transpose_work) ? ((
 /* offset output pointer in case of physical  padding */
 const int IFW = (handle->pack_input_bwd == 1) ? handle->ofw : handle->ifwp;
 const int IFH = (handle->pack_input_bwd == 1) ? handle->ofh : handle->ifhp;
-element_input_type *input_ptr = (handle->pack_input_bwd == 1) ? (element_input_type*)handle->scratch1 + handle->blocksifm * handle->ifmblock * handle->blocksofm * handle->ofmblock * handle->desc.R * handle->desc.S : (element_input_type*)handle->grad_input->data + ((size_t)handle->desc.pad_h_in * handle->ifwp + handle->desc.pad_w_in) * handle->blocksifm * handle->ifmblock;
+element_input_type *input_ptr = (handle->pack_input_bwd == 1) ? (element_input_type*)((char*)handle->scratch + handle->bwd_packing_padding_scratch_offset) : (element_input_type*)handle->grad_input->data + ((size_t)handle->desc.pad_h_in * handle->ifwp + handle->desc.pad_w_in) * handle->blocksifm * handle->ifmblock;
 LIBXSMM_VLA_DECL(5, element_input_type, del_input, input_ptr, IFH, IFW, handle->blocksifm, handle->ifmblock);
 element_output_type *const out = (element_output_type*)handle->grad_output->data;
 LIBXSMM_VLA_DECL(5, const element_output_type, output, out, handle->ofhp, handle->ofwp, handle->blocksofm, handle->ofmblock);
@@ -45,9 +45,9 @@ LIBXSMM_VLA_DECL(6, element_filter_type, wt, (element_filter_type*)handle->reg_f
 #if defined(LIBXSMM_DNN_TPL_BWD_DIRECT_GENERIC_NHWC_RSCK)
 LIBXSMM_VLA_DECL(6, element_filter_type, wt, (element_filter_type*)handle->reg_filter->data, handle->desc.S, handle->blocksifm, handle->ifmblock, handle->blocksofm, handle->ofmblock);
 #endif
-LIBXSMM_VLA_DECL(6, element_filter_type, tr_wt, (element_filter_type*)handle->scratch1, handle->blocksofm, handle->desc.R, handle->desc.S, handle->ofmblock, handle->ifmblock);
+LIBXSMM_VLA_DECL(6, element_filter_type, tr_wt, (element_filter_type*)((char*)handle->scratch + handle->bwd_filter_trans_scratch_offset), handle->blocksofm, handle->desc.R, handle->desc.S, handle->ofmblock, handle->ifmblock);
 /* define weight pointer which has the correct format */
-element_filter_type* weight_base = ((handle->options & LIBXSMM_DNN_CONV_OPTION_BWD_NO_FILTER_TRANSPOSE) > 0 ) ? (element_filter_type*)handle->reg_filter_tr->data : (element_filter_type*)handle->scratch1;
+element_filter_type* weight_base = ((handle->options & LIBXSMM_DNN_CONV_OPTION_BWD_NO_FILTER_TRANSPOSE) > 0 ) ? (element_filter_type*)handle->reg_filter_tr->data : (element_filter_type*)((char*)handle->scratch + handle->bwd_filter_trans_scratch_offset);
 LIBXSMM_VLA_DECL(6, const element_filter_type, weight, weight_base, handle->blocksofm, handle->desc.R, handle->desc.S, handle->ofmblock, handle->ifmblock);
 
 /* lazy barrier init */
@@ -112,10 +112,10 @@ if ( (handle->options & LIBXSMM_DNN_CONV_OPTION_BWD_NO_FILTER_TRANSPOSE) == 0 ) 
 }
 
 if ( imgpt <= 1 ) {
-  my_img_start = LIBXSMM_MIN( ltid / threads_per_image, handle->desc.N);
-  my_img_end = LIBXSMM_MIN( my_img_start + 1, handle->desc.N);
+  my_img_start = LIBXSMM_MIN(ltid / threads_per_image, handle->desc.N);
+  my_img_end = LIBXSMM_MIN(my_img_start + 1, handle->desc.N);
   myIfmId = ltid % threads_per_image;
-  nIfmBlocks = (handle->blocksifm + threads_per_image - 1) / threads_per_image;
+  nIfmBlocks = LIBXSMM_UPDIV(handle->blocksifm, threads_per_image);
   my_ifm_start = LIBXSMM_MIN(myIfmId * nIfmBlocks, handle->blocksifm);
   my_ifm_end = LIBXSMM_MIN((myIfmId+1) * nIfmBlocks, handle->blocksifm);
 }
@@ -135,13 +135,13 @@ if ( handle->use_ifm_parallelization == 1 ) {
   }
   if ((spread_out > 1) && (handle->desc.threads % spread_out == 0)) {
     int tile_id = ltid / spread_out;
-    int ifmpt = (handle->blocksifm+spread_out-1)/spread_out;
+    int ifmpt = LIBXSMM_UPDIV(handle->blocksifm, spread_out);
     int ifm_id = ltid % spread_out;
-    imgpt = ((handle->desc.N + handle->desc.threads - 1)/handle->desc.threads) * spread_out;
-    my_img_start = LIBXSMM_MIN( tile_id * imgpt, handle->desc.N);
-    my_img_end = LIBXSMM_MIN( (tile_id+1) * imgpt, handle->desc.N);
-    my_ifm_start = LIBXSMM_MIN( ifm_id * ifmpt, handle->blocksifm);
-    my_ifm_end = LIBXSMM_MIN( (ifm_id+1) * ifmpt, handle->blocksifm);
+    imgpt = LIBXSMM_UPDIV(handle->desc.N, handle->desc.threads) * spread_out;
+    my_img_start = LIBXSMM_MIN(tile_id * imgpt, handle->desc.N);
+    my_img_end = LIBXSMM_MIN((tile_id+1) * imgpt, handle->desc.N);
+    my_ifm_start = LIBXSMM_MIN(ifm_id * ifmpt, handle->blocksifm);
+    my_ifm_end = LIBXSMM_MIN((ifm_id+1) * ifmpt, handle->blocksifm);
   }
 }
 

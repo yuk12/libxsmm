@@ -1,17 +1,13 @@
-# Export all variables to sub-make processes.
-#.EXPORT_ALL_VARIABLES: #export
-
 ROOTDIR = $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 DEPDIR = ../../..
 SRCDIR = .
 INCDIR = .
-BLDDIR = build
+BLDDIR = obj
 OUTDIR = .
 
 CXXFLAGS = $(NULL)
 CFLAGS = $(NULL)
 DFLAGS = $(NULL)
-IFLAGS = -I"$(INCDIR)" -I"$(DEPDIR)/include"
 
 BLAS = 0
 SYM = 1
@@ -20,13 +16,17 @@ OMP = 1
 # include common Makefile artifacts
 include $(DEPDIR)/Makefile.inc
 
+# necessary include directories
+IFLAGS += -I$(call quote,$(INCDIR))
+IFLAGS += -I$(call quote,$(DEPDIR)/include)
+
 OUTNAME := $(shell basename "$(ROOTDIR)")
 HEADERS := $(wildcard $(INCDIR)/*.h) $(wildcard $(INCDIR)/*.hpp) $(wildcard $(INCDIR)/*.hxx) $(wildcard $(INCDIR)/*.hh) \
            $(wildcard $(SRCDIR)/*.h) $(wildcard $(SRCDIR)/*.hpp) $(wildcard $(SRCDIR)/*.hxx) $(wildcard $(SRCDIR)/*.hh) \
            $(DEPDIR)/include/libxsmm_source.h
 CPPSRCS := $(wildcard $(SRCDIR)/*.cpp)
 CXXSRCS := $(wildcard $(SRCDIR)/*.cxx)
-CCXSRCS := $(wildcard $(SRCDIR)/*.cx)
+CCXSRCS := $(wildcard $(SRCDIR)/*.cc)
 CSOURCS := $(wildcard $(SRCDIR)/*.c)
 CPPOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CPPSRCS:.cpp=-cpp.o)))
 CXXOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CXXSRCS:.cxx=-cxx.o)))
@@ -46,7 +46,7 @@ OBJECTS := $(CPPOBJS) $(CXXOBJS) $(CCXOBJS) $(COBJCTS)
 FTNSRCS := $(FXXSRCS) $(F77SRCS) $(F90SRCS)
 MODULES := $(addsuffix .mod,$(basename $(FTNSRCS))) $(addsuffix .modmic,$(basename $(FTNSRCS)))
 FTNOBJS := $(FXXOBJS) $(F77OBJS) $(F90OBJS)
-XFILES := $(OUTDIR)/$(OUTNAME) $(OUTDIR)/$(OUTNAME)f
+XFILES := $(OUTDIR)/$(OUTNAME) $(OUTDIR)/$(OUTNAME)f $(OUTDIR)/$(OUTNAME)f_udt
 
 .PHONY: all
 all: $(XFILES)
@@ -55,11 +55,15 @@ all: $(XFILES)
 compile: $(OBJECTS) $(FTNOBJS)
 
 ifneq (,$(strip $(FC)))
-$(OUTDIR)/$(OUTNAME)f: $(OUTDIR)/.make $(FTNOBJS) $(FORTDEP) $(LIBDEP) $(EXTDEP)
-	$(FLD) -o $@ $(FTNOBJS) $(FORTLIB) $(MAINLIB) \
+$(OUTDIR)/$(OUTNAME)f: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)-f.o $(FORTDEP) $(LIBDEP) $(EXTDEP)
+	$(FLD) -o $@ $(BLDDIR)/$(OUTNAME)-f.o $(FORTLIB) $(MAINLIB) \
+		$(FCMTFLAGS) $(SLDFLAGS) $(LDFLAGS) $(FLDFLAGS) $(ELDFLAGS)
+$(OUTDIR)/$(OUTNAME)f_udt: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_udt-f.o $(FORTDEP) $(LIBDEP) $(EXTDEP)
+	$(FLD) -o $@ $(BLDDIR)/$(OUTNAME)_udt-f.o $(FORTLIB) $(MAINLIB) \
 		$(FCMTFLAGS) $(SLDFLAGS) $(LDFLAGS) $(FLDFLAGS) $(ELDFLAGS)
 else
 .PHONY: $(OUTDIR)/$(OUTNAME)f
+.PHONY: $(OUTDIR)/$(OUTNAME)f_udt
 endif
 
 $(OUTDIR)/$(OUTNAME): $(OUTDIR)/.make $(OBJECTS) $(LIBDEP) $(EXTDEP)

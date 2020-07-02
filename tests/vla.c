@@ -9,7 +9,6 @@
 /* Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm_macros.h>
-#include <stdlib.h>
 
 #if !defined(ELEM_TYPE)
 # define ELEM_TYPE short

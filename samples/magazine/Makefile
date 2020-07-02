@@ -1,17 +1,13 @@
-# Export all variables to sub-make processes.
-#.EXPORT_ALL_VARIABLES: #export
-
 ROOTDIR = $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 DEPDIR = ../..
 SRCDIR = .
 INCDIR = .
-BLDDIR = build
+BLDDIR = obj
 OUTDIR = .
 
 CXXFLAGS = $(NULL)
 CFLAGS = $(NULL)
 DFLAGS = $(NULL)
-IFLAGS = -I"$(INCDIR)" -I"$(DEPDIR)/include"
 
 BLAS = 1
 SYM = 1
@@ -23,13 +19,17 @@ SSE = 0
 # include common Makefile artifacts
 include $(DEPDIR)/Makefile.inc
 
+# necessary include directories
+IFLAGS += -I$(call quote,$(INCDIR))
+IFLAGS += -I$(call quote,$(DEPDIR)/include)
+
 OUTNAME := $(shell basename "$(ROOTDIR)")
 HEADERS := $(wildcard $(INCDIR)/*.h) $(wildcard $(INCDIR)/*.hpp) $(wildcard $(INCDIR)/*.hxx) $(wildcard $(INCDIR)/*.hh) \
            $(wildcard $(SRCDIR)/*.h) $(wildcard $(SRCDIR)/*.hpp) $(wildcard $(SRCDIR)/*.hxx) $(wildcard $(SRCDIR)/*.hh) \
            $(DEPDIR)/include/libxsmm_source.h
 CPPSRCS := $(wildcard $(SRCDIR)/*.cpp)
 CXXSRCS := $(wildcard $(SRCDIR)/*.cxx)
-CCXSRCS := $(wildcard $(SRCDIR)/*.cx)
+CCXSRCS := $(wildcard $(SRCDIR)/*.cc)
 CSOURCS := $(wildcard $(SRCDIR)/*.c)
 CPPOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CPPSRCS:.cpp=-cpp.o)))
 CXXOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CXXSRCS:.cxx=-cxx.o)))
@@ -66,7 +66,7 @@ endif
 
 ifneq (,$(BLAZEROOT))
   DFLAGS += -D__BLAZE
-  IFLAGS += -I"$(BLAZEROOT)"
+  IFLAGS += -I$(call quote,$(BLAZEROOT))
   BLAZE ?= 1
   DFLAGS += -DBLAZE_USE_SHARED_MEMORY_PARALLELIZATION=$(shell echo "$$(($(BLAZE)-1))")
 else
@@ -89,7 +89,7 @@ endif
 
 ifneq (,$(EIGENROOT))
   DFLAGS += -D__EIGEN
-  IFLAGS += -I"$(EIGENROOT)"
+  IFLAGS += -I$(call quote,$(EIGENROOT))
   EIGEN ?= 1
   #ifneq (0,$(MKL))
     #DFLAGS += -DEIGEN_USE_MKL_ALL
@@ -113,24 +113,24 @@ all: $(XFILES)
 compile: $(OBJECTS) $(FTNOBJS)
 
 $(OUTDIR)/$(OUTNAME)_xsmm: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_xsmm-c.o $(LIBDEP) $(EXTDEP) $(NOBLASDEP)
-	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_xsmm-c.o $(MAINLIB) $(NOBLASLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_xsmm-c.o $(call cleanld,$(MAINLIB) $(NOBLASLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
 
 $(OUTDIR)/$(OUTNAME)_batch: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_batch-c.o $(LIBDEP) $(EXTDEP) $(NOBLASDEP)
-	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_batch-c.o $(MAINLIB) $(EXTLIB) $(NOBLASLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_batch-c.o $(call cleanld,$(EXTLIB) $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
 
 $(OUTDIR)/$(OUTNAME)_blas: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_blas-c.o $(LIBDEP) $(EXTDEP)
-	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_blas-c.o $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_blas-c.o $(call cleanld,$(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
 
 ifneq (,$(BLAZEROOT))
 $(OUTDIR)/$(OUTNAME)_blaze: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_blaze-cpp.o
-	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_blaze-cpp.o $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_blaze-cpp.o $(call cleanld,$(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
 else
 .PHONY: $(OUTDIR)/$(OUTNAME)_blaze
 endif
 
 ifneq (,$(EIGENROOT))
 $(OUTDIR)/$(OUTNAME)_eigen: $(OUTDIR)/.make $(BLDDIR)/$(OUTNAME)_eigen-cpp.o
-	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_eigen-cpp.o $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+	$(LD) -o $@ $(BLDDIR)/$(OUTNAME)_eigen-cpp.o $(call cleanld,$(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
 else
 .PHONY: $(OUTDIR)/$(OUTNAME)_eigen
 endif

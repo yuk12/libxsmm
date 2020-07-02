@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ###############################################################################
 # Copyright (c) Intel Corporation - All rights reserved.                      #
 # This file is part of the LIBXSMM library.                                   #
@@ -16,7 +16,7 @@ GIT=$(command -v git)
 
 if [ "" != "${GREP}"   ] && [ "" != "${UNIQ}"  ] && [ "" != "${GIT}" ];
 then
-  LASTRELEASE=$(${GIT} describe --tags --abbrev=0)
+  LASTRELEASE=$(${GIT} describe --match "[0-9]*" --abbrev=0)
   ${GIT} shortlog ${LASTRELEASE}..HEAD \
   | ${GREP} -v "Merge branch " \
   | ${GREP} -v "Merge pull request " \

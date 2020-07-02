@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env sh
 ###############################################################################
 # Copyright (c) Intel Corporation - All rights reserved.                      #
 # This file is part of the LIBXSMM library.                                   #
@@ -9,13 +9,22 @@
 ###############################################################################
 # Hans Pabst (Intel Corp.)
 ###############################################################################
-
-ECHO=$(command -v echo)
-CUT=$(command -v cut)
 GIT=$(command -v git)
 
-NAME=$(${GIT} name-rev --name-only HEAD)
-MAIN=$(${GIT} describe --tags --abbrev=0)
-REVC=$(${GIT} describe --tags | ${CUT} -d- -f2)
+SHIFT=0
+if [ "$1" ]; then
+  SHIFT=$1
+fi
 
-${ECHO} ${NAME}-${MAIN}-${REVC}
+NAME=$(${GIT} rev-parse --abbrev-ref HEAD 2>/dev/null)
+MAIN=$(${GIT} describe --tags --match "[0-9]*" --abbrev=0 2>/dev/null)
+
+if [ "${MAIN}" ]; then
+  VERSION="${NAME}-${MAIN}"
+  REVC=$(${GIT} rev-list --count ${MAIN}..HEAD 2>/dev/null)
+else
+  VERSION=${NAME}
+  REVC=$(${GIT} rev-list --count HEAD 2>/dev/null)
+fi
+
+echo "${VERSION}-$((REVC+SHIFT))"

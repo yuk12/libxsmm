@@ -1,17 +1,13 @@
-# Export all variables to sub-make processes.
-#.EXPORT_ALL_VARIABLES: #export
-
 ROOTDIR = $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
 DEPDIR = ../../..
 SRCDIR = .
 INCDIR = .
-BLDDIR = build
+BLDDIR = obj
 OUTDIR = .
 
 CXXFLAGS = $(NULL)
 CFLAGS = $(NULL)
 DFLAGS = $(NULL)
-IFLAGS = -I"$(INCDIR)" -I"$(DEPDIR)/include"
 
 BLAS = 2
 OMP = 1
@@ -20,13 +16,17 @@ SYM = 1
 # include common Makefile artifacts
 include $(DEPDIR)/Makefile.inc
 
+# necessary include directories
+IFLAGS += -I$(call quote,$(INCDIR))
+IFLAGS += -I$(call quote,$(DEPDIR)/include)
+
 OUTNAME := $(shell basename "$(ROOTDIR)")
 HEADERS := $(wildcard $(INCDIR)/*.h) $(wildcard $(INCDIR)/*.hpp) $(wildcard $(INCDIR)/*.hxx) $(wildcard $(INCDIR)/*.hh) \
            $(wildcard $(SRCDIR)/*.h) $(wildcard $(SRCDIR)/*.hpp) $(wildcard $(SRCDIR)/*.hxx) $(wildcard $(SRCDIR)/*.hh) \
            $(DEPDIR)/include/libxsmm_source.h
 CPPSRCS := $(wildcard $(SRCDIR)/*.cpp)
 CXXSRCS := $(wildcard $(SRCDIR)/*.cxx)
-CCXSRCS := $(wildcard $(SRCDIR)/*.cx)
+CCXSRCS := $(wildcard $(SRCDIR)/*.cc)
 CSOURCS := $(wildcard $(SRCDIR)/*.c)
 CPPOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CPPSRCS:.cpp=-cpp.o)))
 CXXOBJS := $(patsubst %,$(BLDDIR)/%,$(notdir $(CXXSRCS:.cxx=-cxx.o)))
@@ -46,7 +46,7 @@ OBJECTS := $(CPPOBJS) $(CXXOBJS) $(CCXOBJS) $(COBJCTS)
 FTNSRCS := $(FXXSRCS) $(F77SRCS) $(F90SRCS)
 MODULES := $(addsuffix .mod,$(basename $(FTNSRCS))) $(addsuffix .modmic,$(basename $(FTNSRCS)))
 FTNOBJS := $(FXXOBJS) $(F77OBJS) $(F90OBJS)
-XFILES := $(OUTDIR)/sparse_weight_B_mult $(OUTDIR)/sparse_weight_A_mult $(OUTDIR)/simple
+XFILES := $(OUTDIR)/sparse_weight_B_mult $(OUTDIR)/sparse_weight_A_mult $(OUTDIR)/simple $(OUTDIR)/parallel_sparse_weight_B_mult $(OUTDIR)/sparse_weight_C_redmult $(OUTDIR)/parallel_sparse_weight_C_redmult $(OUTDIR)/parallel_sparse_weight_B_conv
 .PHONY: all
 all: $(XFILES)
 
@@ -54,13 +54,25 @@ all: $(XFILES)
 compile: $(OBJECTS) $(FTNOBJS)
 
 $(OUTDIR)/sparse_weight_B_mult: $(OUTDIR)/.make $(BLDDIR)/sparse_weight_B_mult-c.o $(LIBDEP) $(EXTDEP)
-	$(LD) -o $@ $(BLDDIR)/sparse_weight_B_mult-c.o $(MAINLIB) $(EXTLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+	$(LD) -o $@ $(BLDDIR)/sparse_weight_B_mult-c.o $(call cleanld,$(EXTLIB) $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
 
 $(OUTDIR)/sparse_weight_A_mult: $(OUTDIR)/.make $(BLDDIR)/sparse_weight_A_mult-c.o $(LIBDEP) $(EXTDEP)
-	$(LD) -o $@ $(BLDDIR)/sparse_weight_A_mult-c.o $(MAINLIB) $(EXTLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+	$(LD) -o $@ $(BLDDIR)/sparse_weight_A_mult-c.o $(call cleanld,$(EXTLIB) $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
 
 $(OUTDIR)/simple: $(OUTDIR)/.make $(BLDDIR)/simple-c.o $(LIBDEP) $(EXTDEP)
-	$(LD) -o $@ $(BLDDIR)/simple-c.o $(MAINLIB) $(EXTLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS)
+	$(LD) -o $@ $(BLDDIR)/simple-c.o $(call cleanld,$(EXTLIB) $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
+
+$(OUTDIR)/parallel_sparse_weight_B_mult: $(OUTDIR)/.make $(BLDDIR)/parallel_sparse_weight_B_mult-c.o $(LIBDEP) $(EXTDEP)
+	$(LD) -o $@ $(BLDDIR)/parallel_sparse_weight_B_mult-c.o $(call cleanld,$(EXTLIB) $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
+
+$(OUTDIR)/parallel_sparse_weight_B_conv: $(OUTDIR)/.make $(BLDDIR)/parallel_sparse_weight_B_conv-c.o $(LIBDEP) $(EXTDEP)
+	$(LD) -o $@ $(BLDDIR)/parallel_sparse_weight_B_conv-c.o $(call cleanld,$(EXTLIB) $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
+
+$(OUTDIR)/sparse_weight_C_redmult: $(OUTDIR)/.make $(BLDDIR)/sparse_weight_C_redmult-c.o $(LIBDEP) $(EXTDEP)
+	$(LD) -o $@ $(BLDDIR)/sparse_weight_C_redmult-c.o $(call cleanld,$(EXTLIB) $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
+
+$(OUTDIR)/parallel_sparse_weight_C_redmult: $(OUTDIR)/.make $(BLDDIR)/parallel_sparse_weight_C_redmult-c.o $(LIBDEP) $(EXTDEP)
+	$(LD) -o $@ $(BLDDIR)/parallel_sparse_weight_C_redmult-c.o $(call cleanld,$(EXTLIB) $(MAINLIB) $(SLDFLAGS) $(LDFLAGS) $(CLDFLAGS))
 
 $(BLDDIR)/%-cpp.o: $(SRCDIR)/%.cpp .state $(BLDDIR)/.make $(HEADERS) Makefile $(DEPDIR)/Makefile.inc
 	$(CXX) $(DFLAGS) $(IFLAGS) $(CXXFLAGS) $(CTARGET) -c $< -o $@

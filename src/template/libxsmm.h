@@ -33,23 +33,33 @@
 #define LIBXSMM_VERSION_UPDATE LIBXSMM_CONFIG_VERSION_UPDATE
 #define LIBXSMM_VERSION_PATCH  LIBXSMM_CONFIG_VERSION_PATCH
 
+/**
+ * The following interfaces shall be explicitly included,
+ * i.e., separate from libxsmm.h:
+ * - libxsmm_intrinsics_x86.h
+ * - libxsmm_cpuid.h
+ * - libxsmm_sync.h
+ * - libxsmm_mhd.h
+*/
 #include "libxsmm_dnn_convolution.h"
 #include "libxsmm_dnn_fullyconnected.h"
 #include "libxsmm_dnn_fusedbatchnorm.h"
 #include "libxsmm_dnn_fusedgroupnorm.h"
 #include "libxsmm_dnn_pooling.h"
 #include "libxsmm_dnn_rnncell.h"
+#include "libxsmm_dnn_softmaxloss.h"
+#include "libxsmm_dnn_optimizer.h"
+#include "libxsmm_blocked_gemm.h"
 #include "libxsmm_generator.h"
 #include "libxsmm_frontend.h"
 #include "libxsmm_fsspmdm.h"
 #include "libxsmm_malloc.h"
-#include "libxsmm_blocked_gemm.h"
 #include "libxsmm_spmdm.h"
 #include "libxsmm_cpuid.h"
 #include "libxsmm_timer.h"
 #include "libxsmm_math.h"
-#include "libxsmm_sync.h"
 #include "libxsmm_rng.h"
+
 
 /** Initialize the library; pay for setup cost at a specific point. */
 LIBXSMM_API void libxsmm_init(void);
@@ -97,8 +107,27 @@ LIBXSMM_API int libxsmm_get_transkernel_info(libxsmm_xtransfunction kernel, libx
 /** Get information about the matrix copy kernel. */
 LIBXSMM_API int libxsmm_get_mcopykernel_info(libxsmm_xmcopyfunction kernel, libxsmm_mcopykernel_info* info);
 
+/** Get information about the matrix eltwise kernel. */
+LIBXSMM_API int libxsmm_get_meltwkernel_info(libxsmm_xmeltwfunction kernel, libxsmm_meltwkernel_info* info);
+
 /** Get information about the code registry. */
 LIBXSMM_API int libxsmm_get_registry_info(libxsmm_registry_info* info);
+
+/**
+ * Register user-defined key-value.
+ * Since the key-type is unknown to LIBXSMM, the key must be binary reproducible,
+ * i.e., if it is a structured type (padded data may be uninitialized), it must
+ * be initially zero-filled (memset) followed by an element-wise initialization.
+ * The size of the key is limited (see documentation). The given value is copied
+ * by LIBXSMM and may be initialized at registration-time or whenever queried.
+ * Registered data is released at program termination but can be also released
+ * if needed (libxsmm_xrelease), .e.g., for larger value for the same key.
+ */
+LIBXSMM_API void* libxsmm_xregister(const void* key, size_t key_size, size_t value_size, const void* value_init);
+/** Query user-defined value from LIBXSMM's code registry. */
+LIBXSMM_API void* libxsmm_xdispatch(const void* key, size_t key_size);
+/** Remove key-value pair from code registry and release memory. */
+LIBXSMM_API void libxsmm_xrelease(const void* key, size_t key_size);
 
 /** Query or JIT-generate SMM-kernel; returns NULL if it does not exist or if JIT is not supported (descriptor form). */
 LIBXSMM_API libxsmm_xmmfunction libxsmm_xmmdispatch(const libxsmm_gemm_descriptor* descriptor);
@@ -327,11 +356,27 @@ LIBXSMM_API libxsmm_uubimmfunction_reducebatch_strd libxsmm_uubimmdispatch_reduc
 LIBXSMM_API libxsmm_sububmmfunction_reducebatch_strd libxsmm_sububmmdispatch_reducebatch_strd_unroll(libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k, libxsmm_blasint stride_a, libxsmm_blasint stride_b, libxsmm_blasint unroll_hint,
   const libxsmm_blasint* lda, const libxsmm_blasint* ldb, const libxsmm_blasint* ldc, const int* alpha, const int* beta, const int* flags, const int* prefetch);
 
+/* GEMM + Eltwise fused kernels */
+/**
+ * Query or JIT-generate reduction kernel; returns NULL if JIT is not supported (bf16 inputs, fp32-accumulate internally, bf16 outputs).
+ *
+ * This kernel provides the following operation: C = \sum_i A_i * B_i + C_old + colbroadcast(bias) followed by  C_out = Act( C ), the dump of "C" is possible.
+ * The datatype of bias is determind by the prefix of cbiasact, bias and C have the same leading dimension
+ * */
+LIBXSMM_API libxsmm_bmmfunction_reducebatch_strd_bcbiasact libxsmm_bmmdispatch_reducebatch_strd_bcbiasact(libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k, libxsmm_blasint stride_a, libxsmm_blasint stride_b,
+  libxsmm_meltw_cbiasact_flags meltw_flags, const libxsmm_blasint* lda, const libxsmm_blasint* ldb, const libxsmm_blasint* ldc, const float* alpha, const float* beta, const int* flags, const int* prefetch);
+LIBXSMM_API libxsmm_bmmfunction_reducebatch_strd_bcbiasact libxsmm_bmmdispatch_reducebatch_strd_bcbiasact_unroll(libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k, libxsmm_blasint stride_a, libxsmm_blasint stride_b,
+  libxsmm_blasint unroll_hint, libxsmm_meltw_cbiasact_flags meltw_flags, const libxsmm_blasint* lda, const libxsmm_blasint* ldb, const libxsmm_blasint* ldc, const float* alpha, const float* beta, const int* flags, const int* prefetch);
+LIBXSMM_API libxsmm_bmmfunction_reducebatch_strd_scbiasact libxsmm_bmmdispatch_reducebatch_strd_scbiasact(libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k, libxsmm_blasint stride_a, libxsmm_blasint stride_b,
+  libxsmm_meltw_cbiasact_flags meltw_flags, const libxsmm_blasint* lda, const libxsmm_blasint* ldb, const libxsmm_blasint* ldc, const float* alpha, const float* beta, const int* flags, const int* prefetch);
+LIBXSMM_API libxsmm_bmmfunction_reducebatch_strd_scbiasact libxsmm_bmmdispatch_reducebatch_strd_scbiasact_unroll(libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k, libxsmm_blasint stride_a, libxsmm_blasint stride_b,
+  libxsmm_blasint unroll_hint, libxsmm_meltw_cbiasact_flags meltw_flags, const libxsmm_blasint* lda, const libxsmm_blasint* ldb, const libxsmm_blasint* ldc, const float* alpha, const float* beta, const int* flags, const int* prefetch);
+
 /**
  * Process a series of matrix multiplications (batch). See also libxsmm_gemm_batch/omp.
  * The kind of matrix operands (a, b, c) depend on index_stride:
- * index_stride==0: pointers to pointers of elements e.g., double** for the C matrices.
- * index_stride!=0: pointer to elements e.g., const double* for the A and B matrices.
+ * index_stride==0: pointers to pointers of elements, e.g., double** for the C matrices.
+ * index_stride!=0: pointer to elements, e.g., const double* for the A and B matrices.
  */
 LIBXSMM_API void libxsmm_mmbatch(libxsmm_gemm_precision iprec, libxsmm_gemm_precision oprec,
   const char* transa, const char* transb, libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint k,
@@ -414,7 +459,7 @@ LIBXSMM_APIEXT void libxsmm_sgemm_batch_omp(const char transa_array[], const cha
  * This function is a no-op unless LIBXSMM is built to intercept GEMM calls.
  * Pointer arguments are used to filter intercepted GEMM calls such that
  * non-NULL values match. Otherwise (NULL) the respective argument is
- * considered a "free value" i.e., every value can match; libxsmmext required.
+ * considered a "free value", i.e., every value can match; libxsmmext required.
  */
 LIBXSMM_APIEXT void libxsmm_mmbatch_begin(libxsmm_gemm_precision precision, const int* flags,
   const libxsmm_blasint* m, const libxsmm_blasint* n, const libxsmm_blasint* k,
@@ -426,6 +471,19 @@ LIBXSMM_APIEXT void libxsmm_mmbatch_end(void);
 
 /** Code generation routine for matrix-copy using a descriptor. */
 LIBXSMM_API libxsmm_xmcopyfunction libxsmm_dispatch_mcopy(const libxsmm_mcopy_descriptor* descriptor);
+
+/** Code generation routine for matrix-eltwise using a descriptor. */
+LIBXSMM_API libxsmm_xmeltwfunction libxsmm_dispatch_meltw(const libxsmm_meltw_descriptor* descriptor);
+LIBXSMM_API libxsmm_meltwfunction_copy libxsmm_dispatch_meltw_copy(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type);
+LIBXSMM_API libxsmm_meltwfunction_zero libxsmm_dispatch_meltw_zero(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type);
+LIBXSMM_API libxsmm_meltwfunction_add libxsmm_dispatch_meltw_add(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type);
+LIBXSMM_API libxsmm_meltwfunction_mul libxsmm_dispatch_meltw_mul(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type);
+LIBXSMM_API libxsmm_meltwfunction_relu libxsmm_dispatch_meltw_relu(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type);
+LIBXSMM_API libxsmm_meltwfunction_cvtfp32bf16 libxsmm_dispatch_meltw_cvtfp32bf16(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type);
+LIBXSMM_API libxsmm_meltwfunction_cvtfp32bf16_act libxsmm_dispatch_meltw_cvtfp32bf16_act(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type, libxsmm_meltw_cvta_flags flags);
+LIBXSMM_API libxsmm_meltwfunction_act_cvtfp32bf16 libxsmm_dispatch_meltw_act_cvtfp32bf16(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type, libxsmm_meltw_acvt_flags flags);
+LIBXSMM_API libxsmm_meltwfunction_reduce libxsmm_dispatch_meltw_reduce(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type, libxsmm_meltw_redu_flags flags);
+LIBXSMM_API libxsmm_meltwfunction_scale libxsmm_dispatch_meltw_scale(libxsmm_blasint m, libxsmm_blasint n, const libxsmm_blasint* ldi, const libxsmm_blasint* ldo, libxsmm_datatype in_type, libxsmm_datatype out_type, libxsmm_meltw_scal_flags flags);
 
 /** Code generation routine for transposes using a descriptor */
 LIBXSMM_API libxsmm_xtransfunction libxsmm_dispatch_trans(const libxsmm_trans_descriptor* descriptor);
@@ -449,7 +507,7 @@ LIBXSMM_API libxsmm_trsm_xfunction libxsmm_dispatch_trsm(const libxsmm_trsm_desc
  * Call libxsmm_release_kernel in order to deallocate the JIT'ted code.
  */
 LIBXSMM_API libxsmm_xmmfunction libxsmm_create_xcsr_soa(const libxsmm_gemm_descriptor* descriptor,
-   const unsigned int* row_ptr, const unsigned int* column_idx, const void* values);
+  const unsigned int* row_ptr, const unsigned int* column_idx, const void* values, unsigned int packed_width);
 
 /**
  * Code generation routine for the CSC format which multiplies a dense SOA matrix (each element holds a SIMD-width
@@ -458,7 +516,7 @@ LIBXSMM_API libxsmm_xmmfunction libxsmm_create_xcsr_soa(const libxsmm_gemm_descr
  * Call libxsmm_release_kernel in order to deallocate the JIT'ted code.
  */
 LIBXSMM_API libxsmm_xmmfunction libxsmm_create_xcsc_soa(const libxsmm_gemm_descriptor* descriptor,
-   const unsigned int* column_ptr, const unsigned int* row_idx, const void* values);
+  const unsigned int* column_ptr, const unsigned int* row_idx, const void* values, unsigned int packed_width);
 
 /**
  * Code generation routine for row-major format B matrix which is multiplied by a dense packed matrix (each element holds a SIMD-width
@@ -466,7 +524,7 @@ LIBXSMM_API libxsmm_xmmfunction libxsmm_create_xcsc_soa(const libxsmm_gemm_descr
  * here is no code cache, and user code has to manage the code pointers.
  * Call libxsmm_release_kernel in order to deallocate the JIT'ted code.
  */
-LIBXSMM_API libxsmm_xmmfunction libxsmm_create_pgemm_ac_rm(const libxsmm_gemm_descriptor* descriptor, const unsigned int packed_width);
+LIBXSMM_API libxsmm_xmmfunction libxsmm_create_pgemm_ac_rm(const libxsmm_gemm_descriptor* descriptor, unsigned int packed_width);
 
 /**
  * Code generation routine for row-major format A matrix which is multiplied by a dense packed matrix (each element holds a SIMD-width
@@ -474,7 +532,7 @@ LIBXSMM_API libxsmm_xmmfunction libxsmm_create_pgemm_ac_rm(const libxsmm_gemm_de
  * here is no code cache, and user code has to manage the code pointers.
  * Call libxsmm_release_kernel in order to deallocate the JIT'ted code.
  */
-LIBXSMM_API libxsmm_xmmfunction libxsmm_create_pgemm_bc_rm(const libxsmm_gemm_descriptor* descriptor, const unsigned int packed_width);
+LIBXSMM_API libxsmm_xmmfunction libxsmm_create_pgemm_bc_rm(const libxsmm_gemm_descriptor* descriptor, unsigned int packed_width);
 
 /**
  * Code generation routine for the CSR format which multiplies a dense matrix B into a dense matrix C.
@@ -482,7 +540,7 @@ LIBXSMM_API libxsmm_xmmfunction libxsmm_create_pgemm_bc_rm(const libxsmm_gemm_de
  * Call libxsmm_release_kernel in order to deallocate the JIT'ted code.
  */
 LIBXSMM_API libxsmm_dmmfunction libxsmm_create_dcsr_reg(const libxsmm_gemm_descriptor* descriptor,
-   const unsigned int* row_ptr, const unsigned int* column_idx, const double* values);
+  const unsigned int* row_ptr, const unsigned int* column_idx, const double* values);
 
 /**
  * Code generation routine for the CSR format which multiplies a dense matrix B into a dense matrix C.
@@ -490,28 +548,26 @@ LIBXSMM_API libxsmm_dmmfunction libxsmm_create_dcsr_reg(const libxsmm_gemm_descr
  * Call libxsmm_release_kernel in order to deallocate the JIT'ted code.
  */
 LIBXSMM_API libxsmm_smmfunction libxsmm_create_scsr_reg(const libxsmm_gemm_descriptor* descriptor,
-   const unsigned int* row_ptr, const unsigned int* column_idx, const float* values);
+  const unsigned int* row_ptr, const unsigned int* column_idx, const float* values);
 
 /**
  * Deallocates the JIT'ted code as returned by libxsmm_create_* functions,
  * unregisters and releases code from the code registry.
  */
-LIBXSMM_API void libxsmm_release_kernel(const void* jit_kernel);
+LIBXSMM_API void libxsmm_release_kernel(const void* kernel);
 
 /** Matrix copy function ("in" can be NULL to zero the destination). */
 LIBXSMM_API void libxsmm_matcopy(void* out, const void* in, unsigned int typesize,
-  libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint ldi, libxsmm_blasint ldo,
-  const int* prefetch);
+  libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint ldi, libxsmm_blasint ldo);
 
 /** Matrix copy function ("in" can be NULL to zero the destination, per-thread form). */
 LIBXSMM_API void libxsmm_matcopy_thread(void* out, const void* in, unsigned int typesize,
   libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint ldi, libxsmm_blasint ldo,
-  const int* prefetch, /*unsigned*/int tid, /*unsigned*/int nthreads);
+  /*unsigned*/int tid, /*unsigned*/int nthreads);
 
 /** Matrix copy function ("in" can be NULL to zero the destination); MT via libxsmmext. */
 LIBXSMM_APIEXT void libxsmm_matcopy_omp(void* out, const void* in, unsigned int typesize,
-  libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint ldi, libxsmm_blasint ldo,
-  const int* prefetch);
+  libxsmm_blasint m, libxsmm_blasint n, libxsmm_blasint ldi, libxsmm_blasint ldo);
 
 /** Matrix transposition (out-of-place form). */
 LIBXSMM_API void libxsmm_otrans(void* out, const void* in, unsigned int typesize,
@@ -581,9 +637,9 @@ LIBXSMM_API void libxsmm_bsgemm(const char* transa, const char* transb,
   const libxsmm_bfloat16* b, const libxsmm_blasint* ldb,
   const float* beta, float* c, const libxsmm_blasint* ldc);
 
-#if defined(LIBXSMM_BUILD) && !defined(LIBXSMM_DEFAULT_CONFIG)
+#if !defined(LIBXSMM_DEFAULT_CONFIG) && !defined(LIBXSMM_SOURCE_H)
 $MNK_INTERFACE_LIST
-#endif /*defined(LIBXSMM_BUILD)*/
+#endif /*!defined(LIBXSMM_DEFAULT_CONFIG)*/
 
 #if defined(__cplusplus)
 

@@ -4,6 +4,31 @@
 
 The first code sample given for LIBXSMM was a performance reproducer exercising the same set of kernels usually generated for CP2K's SMM library. The code sample attempted to model the way "matrix stacks" are processed in CP2K, however there are two different code paths in CP2K: (1) the "main" code path used when processing stacks on the host-side, and (2) a code path targeting offload devices. Beside of the host-sided parallelization via MPI (and perhaps OpenMP), the secondly mentioned code path relies on an additional level of parallelization (which is obviously necessary to drive a potentially highly parallel offload device). Also, the additional level of parallelism is not exactly "nested" in the sense that it participates on sharing the same resources as the host-side. In fact, this "artificial benchmark" (cp2k code sample) is modeling a code path as utilized in the secondly mentioned case (offload device).
 
+## Hello LIBXSMM
+
+This example is focused on a specific functionality but may be considered as "Hello LIBXSMM". Copy and paste the example code and build it either manually and as described in our [main documentation](https://libxsmm.readthedocs.io/#hello-libxsmm) (see underneath the source code), or use GNU Make:
+
+```bash
+cd /path/to/libxsmm
+make
+
+cd /path/to/libxsmm/samples/hello
+make
+
+./hello
+```
+
+Alternatively, one can use the Bazel build system. To further simplify, [Bazelisk](https://github.com/bazelbuild/bazelisk) is used to boot-strap [Bazel](https://bazel.build/):
+
+```bash
+cd /path/to/libxsmm/samples/hello
+bazelisk build //...
+
+./bazel-bin/hello
+```
+
+The [C/C++ code](https://github.com/hfp/libxsmm/blob/master/samples/hello/hello.cpp) given here uses LIBXSMM in header-only form (`#include <libxsmm_source.h>`), which is in contrast to the code shown in the [main documentation](https://libxsmm.readthedocs.io/#hello-libxsmm). The [Fortran code](https://github.com/hfp/libxsmm/blob/master/samples/hello/hello.f) (`hello.f`) can be manually compiled like `gfortran -I/path/to/libxsmm/include hello.f -L/path/to/libxsmm/lib -libxsmmf -lxsmm -lxsmmnoblas -o hello` or as part of the above described invocation of GNU Make.
+
 ## Magazine
 
 ### Overview
@@ -37,7 +62,7 @@ Please note that if multiple threads are enabled and used, an appropriate pin-st
 ./benchmark-plot.sh xsmm
 ```
 
-The plot script relies at least on Gnuplot. ImageMagick (mogrify) can be also useful if PNGs are created e.g., `./benchmark-plot.sh xsmm png 0` (the last argument disables single-file charts in contrast to multi-page PDFs created by default, the option also disables chart titles).
+The plot script relies at least on Gnuplot. ImageMagick (mogrify) can be also useful if PNGs are created, e.g., `./benchmark-plot.sh xsmm png 0` (the last argument disables single-file charts in contrast to multi-page PDFs created by default, the option also disables chart titles).
 
 The set of kernels executed during the benchmark can be larger than the kernels presented by the plots: [benchmark.set](https://github.com/hfp/libxsmm/blob/master/samples/magazine/benchmark.set) selects the kernels independent of the kernels executed (union).
 
@@ -72,7 +97,7 @@ The input elements are m-by-n-by-k and the output elements are mm-by-nn-by-kk. W
 
 This collection of code samples exercises different memory streaming cases when performing the matrix multiplication *C~m&#8239;x&#8239;n~ = alpha &middot; A~m&#8239;x&#8239;k~ &middot; B~k&#8239;x&#8239;n~ + beta &middot; C~m&#8239;x&#8239;n~*: (1)&#160;streaming the matrices A, B, and C which is usually referred as batched matrix multiplication, (2)&#160;streaming the inputs A and B but accumulating C within cache, (3)&#160;streaming the A and C matrices while B is kept in cache, (4)&#160;streaming the B and C matrices while A is kept in cache, and (4)&#160;not streaming any of the operands but repeating the very same multiplication until the requested number of matrix multiplications has been completed.
 
-Beside of measuring the duration of a test case, the performance is presented in GFLOPS/s. As an alternative metric, the memory bandwidth is given (the artificial "cached" case omits to present the cache-memory bandwidth). The "pseudo-performance" given in FLOPS/cycle is an artificial scoring, it not only uses a non-standard formula for calculating the FLOPS (*2 \* M \* N \* K - M \* N* rather than *2 \* M \* N \* K*) but also relies on [pseudo clock cycles](https://github.com/hfp/libxsmm/blob/master/include/libxsmm_timer.h#L37):
+Beside of measuring the duration of a test case, the performance is presented in GFLOPS/s. As an alternative metric, the memory bandwidth is given (the artificial "cached" case omits to present the cache-memory bandwidth). The "pseudo-performance" given in FLOPS/cycle is an artificial scoring, it not only uses a non-standard formula for calculating the FLOPS (*2 \* M \* N \* K - M \* N* rather than *2 \* M \* N \* K*) but also relies on (pseudo-)clock cycles:
 
 ```
 $ ./specialized.sh 0
@@ -405,7 +430,7 @@ rm -rf opentuner.db
 ./transpose_opentuner.py --no-dups 7168 8192 6
 ```
 
-The tuning script uses the environment variables `LIBXSMM_XCOPY_M` and `LIBXSMM_XCOPY_N`, which are internal to LIBXSMM. These variables are used to request a specific tiling-scheme inside of LIBXSMM's `libxsmm_otrans_omp` routine.
+The tuning script uses the environment variables `LIBXSMM_TCOPY_M` and `LIBXSMM_TCOPY_N`, which are internal to LIBXSMM. These variables are used to adjust certain thresholds in `libxsmm_otrans` or to request a specific tiling-scheme inside of the `libxsmm_otrans_omp` routine.
 
 ## XGEMM: Tiled GEMM Routines
 
@@ -484,7 +509,7 @@ compressed LMDB data.
 
 The hyperparameter definitions for each topology are also in the corresponding directory under "model_zoo" in
 a .prototxt file with the suffix "solver". For a single-node, this file is called solver.prototxt. For multi-node
-the filename also contains the global minibatch size (=single node minibatch size x number of nodes); e.g., solver_896.prototxt contains hyperparameters for MB=56 per node and 16 nodes. The "solver*" file also contains a
+the filename also contains the global minibatch size (=single node minibatch size x number of nodes);, e.g., solver_896.prototxt contains hyperparameters for MB=56 per node and 16 nodes. The "solver*" file also contains a
 flag that specifies whether to start execution from a checkpoint (and thus read load weights from the "./weights"
 directory) or from scratch; by default execution starts from scratch.
 
@@ -512,15 +537,16 @@ For example:
 
 This code may be integrated with Tensorflow to make use of LIBXSMM's LSTM. Support for creating a Python wheel and a pip package can be found in the [directory](https://github.com/hfp/libxsmm/tree/master/samples/deeplearning/tf_lstm_ops) as well.
 
-## Dispatch (Microbenchmark)
+## Dispatch<a name="dispatch-microbenchmark"></a>
 
-This code sample benchmarks the performance of (1)&#160;the dispatch mechanism, and (2)&#160;the time needed to JIT-generate code for the first time. Both mechanisms are relevant when replacing GEMM calls (see [Call Wrapper](https://github.com/hfp/libxsmm#call-wrapper) section of the reference documentation), or in any case of calling LIBXSMM's native [GEMM functionality](https://libxsmm.readthedocs.io/libxsmm_mm/).
+### Microbenchmark
+
+This code sample benchmarks the performance of (1)&#160;the dispatch mechanism, and (2)&#160;the time needed to JIT-generate code for the first time. Both mechanisms are relevant when replacing GEMM calls (see [Call Wrapper](https://libxsmm.readthedocs.io/libxsmm_mm/#call-wrapper) section of the reference documentation), or in any case of calling LIBXSMM's native [GEMM functionality](https://libxsmm.readthedocs.io/libxsmm_mm/).
 
 **Command Line Interface (CLI)**
 
 * Optionally takes the number of dispatches/code-generations (default:&#160;10000).
 * Optionally takes the number of threads (default:&#160;1).
-
 
 **Measurements (Benchmark)**
 
@@ -529,6 +555,12 @@ This code sample benchmarks the performance of (1)&#160;the dispatch mechanism, 
 * Duration to JIT-generate a GEMM kernel.
 
 In case of a multi-threaded benchmark, the timings represent a highly contended request (worst case). For thread-scaling, it can be observed that read-only accesses (code dispatch) stay roughly with a constant duration whereas write-accesses (code generation) are serialized and hence the duration scales linearly with the number of threads.
+
+The [Fortran example](https://github.com/hfp/libxsmm/blob/master/samples/utilities/dispatch/dispatch.f) (`dispatch.f`) could use `libxsmm_dmmdispatch` (or similar) like the C code (`dispatch.c`) but intentionally shows the lower-level dispatch interface `libxsmm_xmmdispatch` and also omits using the LIBXSMM module. Not using the module confirms: the same task can be achieved by relying only on FORTRAN&#160;77 language level.
+
+### User-Data Dispatch
+
+Further, another [Fortran example](https://github.com/hfp/libxsmm/blob/master/samples/utilities/dispatch/dispatch_udt.f) about [user-data dispatch](https://libxsmm.readthedocs.io/libxsmm_aux/#user-data-dispatch) is not exactly a benchmark. Dispatching user-data containing multiple kernels can obviously save multiple singular dispatches. The C interface for dispatching user-data is designed to follow the same flow as the Fortran interface.
 
 ## MHD Image I/O
 
@@ -549,9 +581,9 @@ This code sample aims to benchmark the performance of the scratch memory allocat
 
 ## Wrapped DGEMM
 
-This code sample is calling DGEMM and there is no dependency on the LIBXSMM API as it only relies on LAPACK/BLAS interface. Two variants are linked when building the source code: (1) code which is dynamically linked against LAPACK/BLAS, (2) code which is linked using `--wrap=`*symbol* as possible when using a GNU&#160;GCC compatible tool chain. For more information, see the [Call Wrapper](https://github.com/hfp/libxsmm#call-wrapper) section of the reference documentation.
+This code sample is calling DGEMM and there is no dependency on the LIBXSMM API as it only relies on LAPACK/BLAS interface. Two variants are linked when building the source code: (1) code which is dynamically linked against LAPACK/BLAS, (2) code which is linked using `--wrap=`*symbol* as possible when using a GNU&#160;GCC compatible tool chain. For more information, see the [Call Wrapper](https://libxsmm.readthedocs.io/libxsmm_mm/#call-wrapper) section of the reference documentation.
 
-The code will execute in three flavors when running `dgemm-test.sh`: (1) code variant which is dynamically linked against the originally supplied LAPACK/BLAS library, (2) code variant which is linked using the wrapper mechanism of the GNU&#160;GCC tool chain, and (3) the first code but using the LD_PRELOAD mechanism (available under Linux).
+The same (source-)code will execute in three flavors when running `dgemm-test.sh`: (1) code variant which is dynamically linked against the originally supplied LAPACK/BLAS library, (2) code variant which is linked using the wrapper mechanism of the GNU&#160;GCC tool chain, and (3) the first code but using the LD_PRELOAD mechanism (available under Linux).
 
 **Command Line Interface (CLI)**
 

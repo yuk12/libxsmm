@@ -2,7 +2,7 @@
 
 ### Intercepted Allocations<a name="scalable_malloc"></a>
 
-To improve thread-scalability and to avoid frequent memory allocation/deallocation, the [scratch memory allocator](libxsmm_aux.md#memory-allocation) can be leveraged by intercepting existing malloc/free calls. This facility is built into LIBXSMM's main library (disable at compile-time: `make MALLOC=0`) and can be enabled by using an environment variable (`LIBXSMM_MALLOC=1`) or can be enabled per API (`libxsmm_set_malloc`). The latter takes an optional lower and/or an optional upper bound to select malloc-calls based on the size of the allocation. This can also be achieved by using a separate environment variable (e.g., LIBXSMM_MALLOC_LIMIT=4m:1g).
+To improve thread-scalability and to avoid frequent memory allocation/deallocation, the [scratch memory allocator](libxsmm_aux.md#memory-allocation) can be leveraged by intercepting existing malloc/free calls. This facility is built into LIBXSMM's main library, but disabled at compile-time (by default); build with `make MALLOC=1` to permanently enable, or build with `make MALLOC=-1` to even require an environment variable `LIBXSMM_MALLOC=1` or an API-call (`libxsmm_set_malloc`). Both runtime settings allow an optional lower and/or an upper bound to select malloc-calls based on the size of the allocation. For the environment option, an extra variable is introduced, e.g., use `LIBXSMM_MALLOC=1 LIBXSMM_MALLOC_LIMIT=4m:1g`.
 
 ```C
 void libxsmm_set_malloc(int enabled, const size_t* lo, const size_t* hi);
@@ -22,7 +22,7 @@ gcc [...] -Wl,--export-dynamic \
 
 The main library causes a BLAS-dependency which may be already fulfilled for the application in question. However, if this is not the case (unresolved symbols), `libxsmmnoblas.a` must be linked in addition. Depending on the dependencies of the application, the link order may also need to be adjusted. Other i.e. a GNU-compatible compiler (as shown above), can induce additional requirements (compiler runtime libraries).
 
-**NOTE**: The Intel Compiler may need "libirc" i.e., `-lirc` in front of `libxsmm.a`. Linking LIBXSMM's static library may require above mentioned linker flags (`--wrap`) in particular when using Intel Fortran (IFORT) as a linker driver unless `CALL libxsmm_init()` is issued (or at least one symbol of LIBXSMM's main library is referenced; check with `nm application | grep libxsmm`). Linking the static library by using the GNU compiler does not strictly need special flags when linking the application.
+**NOTE**: The Intel Compiler may need "libirc", i.e., `-lirc` in front of `libxsmm.a`. Linking LIBXSMM's static library may require above mentioned linker flags (`--wrap`) in particular when using Intel Fortran (IFORT) as a linker driver unless `CALL libxsmm_init()` is issued (or at least one symbol of LIBXSMM's main library is referenced; check with `nm application | grep libxsmm`). Linking the static library by using the GNU compiler does not strictly need special flags when linking the application.
 
 Linking the shared library form of LIBXSMM (`make STATIC=0`) has similar requirements with respect to the application but does not require `-Wl,--wrap` although `-Wl,--export-dynamic` is necessary if the application is statically linked (beside of LIBXSMM linked in a shared fashion). The LD_PRELOAD based mechanism does not need any changes to the link step of an application. However, `libxsmmnoblas` may be required if the application does not already link against BLAS.
 
@@ -96,6 +96,10 @@ Each group of the above indexes is combined into all possible triplets generatin
 
 Of course, both mechanisms (M/N/K and MNK based) can be combined by using the same command line (make). Static optimization and JIT can also be combined (no need to turn off the JIT backend).
 
+### User-Data Dispatch
+
+It can be desired to dispatch user-defined data, i.e., to query a value based on a key. This functionality can be used to, e.g., dispatch multiple kernels in one step if a code location relies on multiple kernels. This way, one can pay the cost of dispatch one time per task rather than according to the number of JIT-kernels used by this task. This functionality is detailed in the section about [Service Functions](libxsmm_aux.md#user-data-dispatch).
+
 ### Targeted Compilation<a name="tuning"></a>
 
 Specifying a code path is not necessary if the JIT backend is not disabled. However, disabling JIT compilation, statically generating a collection of kernels, and targeting a specific instruction set extension for the entire library looks like:
@@ -110,7 +114,7 @@ The above example builds a library which cannot be deployed to anything else but
 make OPT=3 TARGET="-mavx512f -mavx512cd -mavx512er -mavx512pf"
 ```
 
-An extended interface can be generated which allows to perform software prefetches. Prefetching data might be helpful when processing batches of matrix multiplications where the next operands are farther away or otherwise unpredictable in their memory location. The prefetch strategy can be specified similar as shown in the section [Generator Driver](libxsmm_be.md#generator-driver) i.e., by either using the number of the shown enumeration, or by exactly using the name of the prefetch strategy. The only exception is PREFETCH=1 which is automatically selecting a strategy per an internal table (navigated by CPUID flags). The following example is requesting the "AL2jpst" strategy:
+An extended interface can be generated which allows to perform software prefetches. Prefetching data might be helpful when processing batches of matrix multiplications where the next operands are farther away or otherwise unpredictable in their memory location. The prefetch strategy can be specified similar as shown in the section [Generator Driver](libxsmm_be.md#generator-driver), i.e., by either using the number of the shown enumeration, or by exactly using the name of the prefetch strategy. The only exception is PREFETCH=1 which is automatically selecting a strategy per an internal table (navigated by CPUID flags). The following example is requesting the "AL2jpst" strategy:
 
 ```bash
 make PREFETCH=8
@@ -118,7 +122,7 @@ make PREFETCH=8
 
 The prefetch interface is extending the signature of all kernels by three arguments (pa, pb, and pc). These additional arguments are specifying the locations of the operands of the next multiplication (the next a, b, and c matrices). Providing unnecessary arguments in case of the three-argument kernels is not big a problem (beside of some additional call-overhead), however running a 3-argument kernel with more than three arguments and thereby picking up garbage data is misleading or disabling the hardware prefetcher (due to software prefetches). In this case, a misleading prefetch location is given plus an eventual page fault due to an out-of-bounds (garbage-)location.
 
-Further, the generated configuration ([template](https://github.com/hfp/libxsmm/blob/master/src/template/libxsmm_config.h)) of the library encodes the parameters for which the library was built for (static information). This helps optimizing client code related to the library's functionality. For example, the LIBXSMM_MAX_\* and LIBXSMM_AVG_\* information can be used with the LIBXSMM_PRAGMA_LOOP_COUNT macro to hint loop trip counts when handling matrices related to the problem domain of LIBXSMM.
+Further, a generated configuration ([template](https://github.com/hfp/libxsmm/blob/master/include/libxsmm_config.h)) of the library encodes the parameters for which the library was built for (static information). This helps optimizing client code related to the library's functionality. For example, the LIBXSMM_MAX_\* and LIBXSMM_AVG_\* information can be used with the LIBXSMM_PRAGMA_LOOP_COUNT macro to hint loop trip counts when handling matrices related to the problem domain of LIBXSMM.
 
 ### Auto-dispatch
 

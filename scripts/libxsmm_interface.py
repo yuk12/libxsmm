@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 ###############################################################################
 # Copyright (c) Intel Corporation - All rights reserved.                      #
 # This file is part of the LIBXSMM library.                                   #
@@ -73,7 +73,11 @@ if __name__ == "__main__":
             if mnklist and 0 != precision:
                 substitute["MNK_INTERFACE_LIST"] += "\n"
             print(template.substitute(substitute))
-        else:
+        else:  # Fortran interface
+            # Fortran's OPTIONAL allows to always generate an interface
+            # with prefetch signature (more flexible usage)
+            if 0 == prefetch:
+                prefetch = -1
             version, branch, realversion = libxsmm_utilities.version_branch(16)
             major, minor, update, patch = libxsmm_utilities.version_numbers(
                 version

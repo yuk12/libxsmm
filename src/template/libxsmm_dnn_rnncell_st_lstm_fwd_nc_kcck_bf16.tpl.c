@@ -12,8 +12,6 @@
 #define PROFILE
 #endif
 
-#define _mm512_loadcvt_bf16_fp32(A)   _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepi16_epi32(_mm256_loadu_si256((__m256i*)(A))),16))
-
 #define MATRIX_CVT_BF16_FP32_LD(m, n, ld, _src, _dst) \
 do { \
   libxsmm_bfloat16 *src = _src; \
@@ -21,7 +19,7 @@ do { \
   libxsmm_blasint __i,__j; \
   for ( __j = 0; __j < n; ++__j ) { \
     for ( __i = 0; __i < m; __i+=16 ) { \
-      _mm512_store_ps((float*)&dst[(__j*ld)+__i], _mm512_loadcvt_bf16_fp32(&src[(__j*ld)+__i])); \
+      _mm512_storeu_ps((float*)&dst[(__j*ld)+__i], LIBXSMM_INTRINSICS_MM512_CVTPBH_PS(_mm256_loadu_si256((__m256i*)&src[(__j*ld)+__i]))); \
     } \
   } \
 } while (0)
@@ -33,7 +31,7 @@ do { \
   libxsmm_blasint __i,__j; \
   for ( __j = 0; __j < n; ++__j ) { \
     for ( __i = 0; __i < m; __i+=16 ) { \
-      _mm512_store_ps((float*)&srcdst[(__j*ld)+__i], _mm512_loadcvt_bf16_fp32(&colv[__i])); \
+      _mm512_storeu_ps((float*)&srcdst[(__j*ld)+__i], LIBXSMM_INTRINSICS_MM512_CVTPBH_PS(_mm256_loadu_si256((__m256i*)&colv[__i]))); \
     } \
   } \
 } while (0)
@@ -46,7 +44,7 @@ do { \
   __m512 vbias = _mm512_set1_ps(const_bias); \
   for ( __j = 0; __j < n; ++__j ) { \
     for ( __i = 0; __i < m; __i+=16 ) { \
-      _mm512_store_ps((float*)&srcdst[(__j*ld)+__i], _mm512_add_ps(vbias, _mm512_loadcvt_bf16_fp32(&colv[__i]))); \
+      _mm512_storeu_ps((float*)&srcdst[(__j*ld)+__i], _mm512_add_ps(vbias, LIBXSMM_INTRINSICS_MM512_CVTPBH_PS(_mm256_loadu_si256((__m256i*)&colv[__i])))); \
     } \
   } \
 } while (0)
@@ -63,7 +61,7 @@ const libxsmm_blasint bn = handle->bn;
 const libxsmm_blasint bc = handle->bc;
 const libxsmm_blasint cBlocks = C/bc;
 const libxsmm_blasint kBlocks = K/bk;
-const int lpb = 2;
+int lpb = 2;
 const int bc_lp = bc/lpb;
 const int bk_lp = bk/lpb;
 unsigned long long blocks, blocksa, blocksb;
@@ -150,22 +148,6 @@ const libxsmm_blasint chunksize = (work % (libxsmm_blasint)handle->desc.threads 
 const libxsmm_blasint thr_begin = (ltid * chunksize < work) ? (ltid * chunksize) : work;
 const libxsmm_blasint thr_end = ((ltid + 1) * chunksize < work) ? ((ltid + 1) * chunksize) : work;
 
-#if 0
-/* number of tasks that could be run in parallel for C and K blocks*/
-const libxsmm_blasint work_ck = (C/bc) * (K/bk);
-/* compute chunk size */
-const libxsmm_blasint chunksize_ck = (work_ck % (libxsmm_blasint)handle->desc.threads == 0) ? (work_ck / (libxsmm_blasint)handle->desc.threads) : ((work_ck / (libxsmm_blasint)handle->desc.threads) + 1);
-/* compute thr_begin and thr_end */
-const libxsmm_blasint thr_begin_ck = (ltid * chunksize_ck < work_ck) ? (ltid * chunksize_ck) : work_ck;
-const libxsmm_blasint thr_end_ck = ((ltid + 1) * chunksize_ck < work_ck) ? ((ltid + 1) * chunksize_ck) : work_ck;
-/* number of tasks that could be run in parallel for K and K blocks*/
-const libxsmm_blasint work_kk = (K/bk) * (K/bk);
-/* compute chunk size */
-const libxsmm_blasint chunksize_kk = (work_kk % (libxsmm_blasint)handle->desc.threads == 0) ? (work_kk / (libxsmm_blasint)handle->desc.threads) : ((work_kk / (libxsmm_blasint)handle->desc.threads) + 1);
-/* compute thr_begin and thr_end */
-const libxsmm_blasint thr_begin_kk = (ltid * chunksize_kk < work_kk) ? (ltid * chunksize_kk) : work_kk;
-const libxsmm_blasint thr_end_kk = ((ltid + 1) * chunksize_kk < work_kk) ? ((ltid + 1) * chunksize_kk) : work_kk;
-#endif
 const int use_fused_implementation = (C == 2048 && K == 2048) ? 1 : 0;
 
 #ifdef PROFILE
@@ -239,4 +221,3 @@ if (ltid == 0) {
 #undef MATRIX_CVT_BF16_FP32_LD
 #undef MATRIX_BCST_CVT_BF16_FP32_COLVECTOR_LD
 #undef MATRIX_BCST_CVT_BF16_FP32_COLVECTOR_CONST_LD
-#undef _mm512_loadcvt_bf16_fp32

@@ -13,10 +13,10 @@ int img, ofm1, ofm2 = 0, ifm1, ifm2 = 0, oj, oi, kj, ki, oi_use, oj_use, ii_use,
 int last_ki, last_kj, next_kj;
 /* computing first logical thread */
 const int ltid = tid - start_thread;
-int imgpt = (handle->desc.N + handle->desc.threads - 1)/handle->desc.threads;
+int imgpt = LIBXSMM_UPDIV(handle->desc.N, handle->desc.threads);
 int threads_per_image = handle->desc.threads / handle->desc.N;
-int my_img_start = LIBXSMM_MIN( ltid * imgpt, handle->desc.N);
-int my_img_end = LIBXSMM_MIN( (ltid+1) * imgpt, handle->desc.N);
+int my_img_start = LIBXSMM_MIN(ltid * imgpt, handle->desc.N);
+int my_img_end = LIBXSMM_MIN((ltid+1) * imgpt, handle->desc.N);
 int my_ofm_start = 0;
 int my_ofm_end = handle->blocksofm;
 int ifmblock_lp =  handle->ifmblock/handle->fm_lp_block;
@@ -24,44 +24,31 @@ int ifmblock_lp =  handle->ifmblock/handle->fm_lp_block;
 const element_filter_type *A_ptrs[1024];
 const element_input_type  *B_ptrs[1024];
 unsigned long long n_blocks;
+/* JITed eltwise function */
+libxsmm_meltwfunction_cvtfp32bf16 cvt_kernel = handle->fwd_cvtfp32bf16_kernel;
+libxsmm_meltw_cvtfp32bf16_param cvt_params;
 
 /* offset output pointer in case of physical output padding */
 element_output_type* out = (element_output_type*)handle->reg_output->data + ((size_t)handle->desc.pad_h_out * handle->ofwp + handle->desc.pad_w_out) * handle->ofmblock;
-float* out_fp32 = (float*)handle->scratch6 + ((size_t)handle->desc.pad_h_out * handle->ofwp + handle->desc.pad_w_out) * handle->ofmblock;
-float* out_scratch = (float*)handle->scratch6 + ((size_t) handle->desc.N * handle->ofwp * handle->ofhp * handle->desc.K + ltid * handle->fwd_ofw_rb * handle->fwd_ofh_rb * handle->ofmblock);
+float* out_fp32 = (float*)((char*)handle->scratch + handle->fwd_lp_output_full_scratch_offset) + ((size_t)handle->desc.pad_h_out * handle->ofwp + handle->desc.pad_w_out) * handle->ofmblock;
+float* out_scratch = (float*)((char*)handle->scratch + handle->fwd_lp_output_block_scratch_offset) + ((size_t) ltid * handle->fwd_ofw_rb * handle->fwd_ofh_rb * handle->ofmblock);
 float* out_ptr;
 LIBXSMM_VLA_DECL(5, element_output_type, output, out, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
 LIBXSMM_VLA_DECL(5, float, output_fp32, out_fp32, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
 LIBXSMM_VLA_DECL(3, float, scratch_fp32, out_scratch, handle->fwd_ofw_rb, handle->ofmblock);
-element_input_type *input_ptr = (handle->pack_input == 1) ?(element_input_type*)handle->scratch1 + handle->blocksifm * handle->ifmblock * handle->blocksofm * handle->ofmblock * handle->desc.R * handle->desc.S : (element_input_type*)handle->reg_input->data;
+element_input_type *input_ptr = (handle->pack_input == 1) ?(element_input_type*)((char*)handle->scratch + handle->fwd_packing_padding_scratch_offset) : (element_input_type*)handle->reg_input->data;
 const int IFW = (handle->pack_input == 1) ? handle->ofwp : handle->ifwp;
 const int IFH = (handle->pack_input == 1) ? handle->ofhp : handle->ifhp;
 LIBXSMM_VLA_DECL(5, element_input_type, input, input_ptr, handle->blocksifm, IFH, IFW, handle->ifmblock);
 LIBXSMM_VLA_DECL(7, const element_filter_type, weight, (element_filter_type*)handle->reg_filter->data, handle->blocksifm, handle->desc.R, handle->desc.S, ifmblock_lp, handle->ofmblock, handle->fm_lp_block);
 
-#if defined(LIBXSMM_DNN_CONVOLUTION_FWD_AVX512_CPX)
-#define LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16(in, out, length) do { \
-  int __i = 0; \
-  for ( __i = 0; __i < length; __i+= 32) { \
-    _mm512_storeu_si512((libxsmm_bfloat16*)out+__i, (__m512i) _mm512_cvtne2ps_pbh(LIBXSMM_INTRINSICS_MM512_LOAD_PS((float*)in+__i+16), LIBXSMM_INTRINSICS_MM512_LOAD_PS((float*)in+__i))); \
-  } \
-} while(0)
-#else
-#define LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16(in, out, length) do { \
-  int __i = 0; \
-  for ( __i = 0; __i < length; __i+= 16) { \
-    _mm256_storeu_si256((__m256i*)(out+__i), _mm512_cvtepi32_epi16( _mm512_srai_epi32( LIBXSMM_INTRINSICS_MM512_ROUNDNE_BF16( LIBXSMM_INTRINSICS_MM512_LOAD_PS((float*)in+__i) ),16)) ); \
-  } \
-} while(0)
-#endif
-
 libxsmm_barrier_init(handle->barrier, ltid);
 
 if ( imgpt <= 1 ) {
-  my_img_start = LIBXSMM_MIN( ltid / threads_per_image, handle->desc.N);
-  my_img_end = LIBXSMM_MIN( my_img_start + 1, handle->desc.N);
+  my_img_start = LIBXSMM_MIN(ltid / threads_per_image, handle->desc.N);
+  my_img_end = LIBXSMM_MIN(my_img_start + 1, handle->desc.N);
   myOfmId = ltid % threads_per_image;
-  nOfmBlocks = (handle->blocksofm + threads_per_image - 1) / threads_per_image;
+  nOfmBlocks = LIBXSMM_UPDIV(handle->blocksofm, threads_per_image);
   my_ofm_start = LIBXSMM_MIN(myOfmId * nOfmBlocks, handle->blocksofm);
   my_ofm_end = LIBXSMM_MIN((myOfmId+1) * nOfmBlocks, handle->blocksofm);
 }
@@ -80,21 +67,21 @@ if ( handle->use_ofm_parallelization == 1 ) {
   }
   if ((spread_out > 1) && (handle->desc.threads % spread_out == 0)) {
     int tile_id = ltid / spread_out;
-    int ofmpt = (handle->blocksofm+spread_out-1)/spread_out;
+    int ofmpt = LIBXSMM_UPDIV(handle->blocksofm, spread_out);
     int ofm_id = ltid % spread_out;
-    imgpt = ((handle->desc.N + handle->desc.threads - 1)/handle->desc.threads) * spread_out;
-    my_img_start = LIBXSMM_MIN( tile_id * imgpt, handle->desc.N);
-    my_img_end = LIBXSMM_MIN( (tile_id+1) * imgpt, handle->desc.N);
-    my_ofm_start = LIBXSMM_MIN( ofm_id * ofmpt, handle->blocksofm);
-    my_ofm_end = LIBXSMM_MIN( (ofm_id+1) * ofmpt, handle->blocksofm);
+    imgpt = LIBXSMM_UPDIV(handle->desc.N, handle->desc.threads) * spread_out;
+    my_img_start = LIBXSMM_MIN(tile_id * imgpt, handle->desc.N);
+    my_img_end = LIBXSMM_MIN((tile_id+1) * imgpt, handle->desc.N);
+    my_ofm_start = LIBXSMM_MIN(ofm_id * ofmpt, handle->blocksofm);
+    my_ofm_end = LIBXSMM_MIN((ofm_id+1) * ofmpt, handle->blocksofm);
   }
 }
 
 if (handle->pack_input == 1) {
-  int ifmpt = (handle->blocksifm+spread_out-1)/spread_out;
+  int ifmpt = LIBXSMM_UPDIV(handle->blocksifm, spread_out);
   int ifm_id = ltid % spread_out;
-  int my_ifm_start = LIBXSMM_MIN( ifm_id * ifmpt, handle->blocksifm);
-  int my_ifm_end = LIBXSMM_MIN( (ifm_id+1) * ifmpt, handle->blocksifm);
+  int my_ifm_start = LIBXSMM_MIN(ifm_id * ifmpt, handle->blocksifm);
+  int my_ifm_end = LIBXSMM_MIN((ifm_id+1) * ifmpt, handle->blocksifm);
   LIBXSMM_VLA_DECL(5, element_input_type, input_src, (element_input_type*)handle->reg_input->data, handle->blocksifm, handle->ifhp, handle->ifwp, handle->ifmblock);
   for (img = my_img_start; img < my_img_end; img++) {
     for (ifm1 = my_ifm_start; ifm1 < my_ifm_end; ifm1++) {
@@ -182,11 +169,10 @@ if (handle->use_fallback_fwd_loops == 1) {
                         ((kj == last_kj && ki == last_ki) ||
                          (next_kj == 0 && next_kj == last_kj && oj == 0) ||
                          (next_kj == handle->desc.R-1 && next_kj == last_kj && oj == handle->ofh-1))) {
-                      for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                        LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16(  &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                            &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                            handle->fwd_ofw_rb * handle->ofmblock);
-                      }
+
+                      cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                      cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                      cvt_kernel(&cvt_params);
                     }
                   }
                 } else if (oi == handle->ofw-handle->fwd_ofw_rb  && ki == handle->desc.S-1) {
@@ -207,11 +193,9 @@ if (handle->use_fallback_fwd_loops == 1) {
                         ((kj == last_kj && ki == last_ki) ||
                          (next_kj == 0 && next_kj == last_kj && oj == 0) ||
                          (next_kj == handle->desc.R-1 && next_kj == last_kj && oj == handle->ofh-1))) {
-                      for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                        LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16( &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                            &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                            handle->fwd_ofw_rb * handle->ofmblock);
-                      }
+                      cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                      cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                      cvt_kernel(&cvt_params);
                     }
                   }
                 } else {
@@ -231,11 +215,9 @@ if (handle->use_fallback_fwd_loops == 1) {
                         ((kj == last_kj && ki == last_ki) ||
                          (next_kj == 0 && next_kj == last_kj && oj == 0) ||
                          (next_kj == handle->desc.R-1 && next_kj == last_kj && oj == handle->ofh-1))) {
-                      for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                        LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16( &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                            &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                            handle->fwd_ofw_rb * handle->ofmblock);
-                      }
+                      cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                      cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                      cvt_kernel(&cvt_params);
                     }
                   }
                 }
@@ -297,11 +279,9 @@ if (handle->use_fallback_fwd_loops == 1) {
               out_ptr = (handle->avoid_acc_load == 1) ? &LIBXSMM_VLA_ACCESS( 3, scratch_fp32, 0, 0, 0, handle->fwd_ofw_rb, handle->ofmblock) : &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
               br_gemm_kernel(A_ptrs, B_ptrs, out_ptr, &n_blocks);
               if (ifm2 == handle->blocksifm && kj == handle->desc.R && ki == handle->desc.S) {
-                for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                  LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16( &LIBXSMM_VLA_ACCESS( 5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                      &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                      handle->fwd_ofw_rb * handle->ofmblock);
-                }
+                cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS( 5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                cvt_kernel(&cvt_params);
               }
             }
           }
@@ -376,11 +356,9 @@ if (handle->use_fallback_fwd_loops == 1) {
                                   ((kj == last_kj && ki == last_ki) ||
                                    (next_kj == 0 && next_kj == last_kj && oj == 0) ||
                                    (next_kj == handle->desc.R-1 && next_kj == last_kj && oj == handle->ofh-1))) {
-                                for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                                  LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16(  &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                                      &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                                      handle->fwd_ofw_rb * handle->ofmblock);
-                                }
+                                cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                                cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                                cvt_kernel(&cvt_params);
                               }
                             }
                           } else if (oi == handle->ofw-handle->fwd_ofw_rb  && ki == handle->desc.S-1) {
@@ -400,11 +378,9 @@ if (handle->use_fallback_fwd_loops == 1) {
                                   ((kj == last_kj && ki == last_ki) ||
                                    (next_kj == 0 && next_kj == last_kj && oj == 0) ||
                                    (next_kj == handle->desc.R-1 && next_kj == last_kj && oj == handle->ofh-1))) {
-                                for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                                  LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16( &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                                      &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                                      handle->fwd_ofw_rb * handle->ofmblock);
-                                }
+                                cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                                cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                                cvt_kernel(&cvt_params);
                               }
                             }
                           } else {
@@ -424,11 +400,9 @@ if (handle->use_fallback_fwd_loops == 1) {
                                   ((kj == last_kj && ki == last_ki) ||
                                    (next_kj == 0 && next_kj == last_kj && oj == 0) ||
                                    (next_kj == handle->desc.R-1 && next_kj == last_kj && oj == handle->ofh-1))) {
-                                for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                                  LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16( &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                                      &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                                      handle->fwd_ofw_rb * handle->ofmblock);
-                                }
+                                cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                                cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                                cvt_kernel(&cvt_params);
                               }
                             }
                           }
@@ -498,11 +472,9 @@ if (handle->use_fallback_fwd_loops == 1) {
                         out_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
                         br_gemm_kernel(A_ptrs, B_ptrs, out_ptr, &n_blocks);
                         if (kj1 == handle->desc.R && ki1 == handle->desc.S && ifm2 == handle->blocksifm) {
-                          for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                            LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16( &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                                &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                                handle->fwd_ofw_rb * handle->ofmblock);
-                          }
+                          cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                          cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                          cvt_kernel(&cvt_params);
                         }
                       }
                     }
@@ -568,11 +540,9 @@ if (handle->use_fallback_fwd_loops == 1) {
                       out_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
                       br_gemm_kernel(A_ptrs, B_ptrs, out_ptr, &n_blocks);
                       if (kj == handle->desc.R && ki == handle->desc.S && ifm2 == handle->blocksifm) {
-                        for (ojj = 0; ojj < handle->fwd_ofh_rb; ojj++) {
-                          LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16( &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                              &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use+ojj, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
-                              handle->fwd_ofw_rb * handle->ofmblock);
-                        }
+                        cvt_params.in_ptr = &LIBXSMM_VLA_ACCESS(5, output_fp32, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                        cvt_params.out_ptr = &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj_use, oi_use, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock);
+                        cvt_kernel(&cvt_params);
                       }
                     }
                   }
@@ -591,7 +561,7 @@ if (handle->use_fallback_fwd_loops == 1) {
     for (img = my_img_start; img < my_img_end; img++) {
       for (ofm1 = my_ofm_start; ofm1 < my_ofm_end; ofm1++) {
         for (oj = 0; oj < handle->ofh; oj++) {
-          LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16( &LIBXSMM_VLA_ACCESS( 5, output_fp32, img, ofm1, oj, 0, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
+          LIBXSMM_DNN_CONVERT_BUFFER_F32_BF16( &LIBXSMM_VLA_ACCESS( 5, output_fp32, img, ofm1, oj, 0, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
               &LIBXSMM_VLA_ACCESS( 5, output, img, ofm1, oj, 0, 0, handle->blocksofm, handle->ofhp, handle->ofwp, handle->ofmblock),
               handle->ofw * handle->ofmblock);
         }
@@ -603,6 +573,4 @@ if (handle->use_fallback_fwd_loops == 1) {
 }
 
 libxsmm_barrier_wait(handle->barrier, ltid);
-
-#undef LIBXSMM_DNN_CONVOLUTION_FWD_CONVERT_F32_BF16
 

@@ -115,13 +115,15 @@
 #define LIBXSMM_EQUAL_shortdouble 0
 #define LIBXSMM_EQUAL_shortfloat 0
 
-#if defined(LIBXSMM_GEMM_CONST)
-# undef LIBXSMM_GEMM_CONST
-# define LIBXSMM_GEMM_CONST const
-#elif defined(LIBXSMM_GEMM_NONCONST) || defined(__OPENBLAS) || defined(__OPENBLAS77)
-# define LIBXSMM_GEMM_CONST
+#if defined(LIBXSMM_BLAS_CONST)
+# undef LIBXSMM_BLAS_CONST
+# define LIBXSMM_BLAS_CONST const
+#elif defined(OPENBLAS_CONST)
+# define LIBXSMM_BLAS_CONST OPENBLAS_CONST
+#elif defined(LIBXSMM_BLAS_NONCONST) || defined(__OPENBLAS) || defined(__OPENBLAS77)
+# define LIBXSMM_BLAS_CONST
 #else
-# define LIBXSMM_GEMM_CONST const
+# define LIBXSMM_BLAS_CONST const
 #endif
 
 #if !defined(LIBXSMM_NO_BLAS)
@@ -146,13 +148,13 @@
 
 #if defined(LIBXSMM_BUILD)
 # if defined(LIBXSMM_BUILD_EXT) && !defined(__STATIC)
-#   define LIBXSMM_GEMM_SYMBOL_VISIBILITY LIBXSMM_APIEXT
+#   define LIBXSMM_BLAS_SYMBOL_VISIBILITY LIBXSMM_APIEXT
 # elif defined(LIBXSMM_NO_BLAS) && (1 == LIBXSMM_NO_BLAS)
-#   define LIBXSMM_GEMM_SYMBOL_VISIBILITY LIBXSMM_API
+#   define LIBXSMM_BLAS_SYMBOL_VISIBILITY LIBXSMM_API
 # endif
 #endif
-#if !defined(LIBXSMM_GEMM_SYMBOL_VISIBILITY)
-# define LIBXSMM_GEMM_SYMBOL_VISIBILITY LIBXSMM_VISIBILITY_IMPORT LIBXSMM_RETARGETABLE
+#if !defined(LIBXSMM_BLAS_SYMBOL_VISIBILITY)
+# define LIBXSMM_BLAS_SYMBOL_VISIBILITY LIBXSMM_EXTERN LIBXSMM_VISIBILITY_IMPORT LIBXSMM_RETARGETABLE
 #endif
 
 #define LIBXSMM_BLAS_SYMBOL_SIGNATURE_gemm_batch(CONST_STAR, STAR, TYPE) char CONST_STAR, char CONST_STAR, \
@@ -166,13 +168,13 @@
   TYPE CONST_STAR, TYPE CONST_STAR, libxsmm_blasint CONST_STAR, TYPE CONST_STAR, libxsmm_blasint CONST_STAR, \
   TYPE CONST_STAR, TYPE STAR, libxsmm_blasint CONST_STAR
 #define LIBXSMM_BLAS_SYMBOL_SIGNATURE(CONST_STAR, STAR, TYPE, KIND) LIBXSMM_CONCATENATE(LIBXSMM_BLAS_SYMBOL_SIGNATURE_, KIND)(CONST_STAR, STAR, TYPE)
-#define LIBXSMM_BLAS_SYMBOL_FDECL(CONST_STAR, STAR, TYPE, KIND) LIBXSMM_GEMM_SYMBOL_VISIBILITY \
+#define LIBXSMM_BLAS_SYMBOL_FDECL(CONST_STAR, STAR, TYPE, KIND) LIBXSMM_BLAS_SYMBOL_VISIBILITY \
   void LIBXSMM_BLAS_SYMBOL(TYPE, KIND)(LIBXSMM_BLAS_SYMBOL_SIGNATURE(CONST_STAR, STAR, TYPE, KIND))
-#define LIBXSMM_BLAS_SYMBOL_CDECL(CONST_STAR, STAR, TYPE, KIND) LIBXSMM_GEMM_SYMBOL_VISIBILITY \
+#define LIBXSMM_BLAS_SYMBOL_CDECL(CONST_STAR, STAR, TYPE, KIND) LIBXSMM_BLAS_SYMBOL_VISIBILITY \
   void LIBXSMM_CBLAS_SYMBOL(TYPE, KIND)(LIBXSMM_BLAS_SYMBOL_SIGNATURE(CONST_STAR, STAR, TYPE, KIND))
 
 #if (0 != LIBXSMM_BLAS) /* BLAS available */
-# define LIBXSMM_BLAS_SYMBOL_DECL(TYPE, KIND) LIBXSMM_BLAS_DECL(TYPE, KIND, LIBXSMM_BLAS_SYMBOL_FDECL(LIBXSMM_GEMM_CONST*, *, TYPE, KIND))
+# define LIBXSMM_BLAS_SYMBOL_DECL(TYPE, KIND) LIBXSMM_BLAS_DECL(TYPE, KIND, LIBXSMM_BLAS_SYMBOL_FDECL(LIBXSMM_BLAS_CONST*, *, TYPE, KIND))
 #else
 # define LIBXSMM_BLAS_SYMBOL_DECL(TYPE, KIND)
 #endif
@@ -181,6 +183,18 @@
 #define LIBXSMM_GEMM_FLAGS(TRANSA, TRANSB) /* check for N/n rather than T/t since C/c is also valid! */ \
    ((('n' == (TRANSA) || *"N" == (TRANSA)) ? LIBXSMM_GEMM_FLAG_NONE : LIBXSMM_GEMM_FLAG_TRANS_A) \
   | (('n' == (TRANSB) || *"N" == (TRANSB)) ? LIBXSMM_GEMM_FLAG_NONE : LIBXSMM_GEMM_FLAG_TRANS_B))
+
+/** Helper macro consolidating CBLAS transpose requests into a set of flags. */
+#define LIBXSMM_GEMM_CFLAGS(TRANSA, TRANSB) /* check for N/n rather than T/t since C/c is also valid! */ \
+   ((CblasNoTrans == (TRANSA) ? LIBXSMM_GEMM_FLAG_NONE : LIBXSMM_GEMM_FLAG_TRANS_A) \
+  | (CblasNoTrans == (TRANSB) ? LIBXSMM_GEMM_FLAG_NONE : LIBXSMM_GEMM_FLAG_TRANS_B))
+
+/** Helper macro consolidating the transpose requests into a set of flags. */
+#define LIBXSMM_GEMM_VNNI_FLAGS(TRANSA, TRANSB, VNNIA, VNNIB) /* check for N/n rather than T/t since C/c is also valid! */ \
+   ((('n' == (TRANSA) || *"N" == (TRANSA)) ? LIBXSMM_GEMM_FLAG_NONE : LIBXSMM_GEMM_FLAG_TRANS_A) \
+  | (('n' == (TRANSB) || *"N" == (TRANSB)) ? LIBXSMM_GEMM_FLAG_NONE : LIBXSMM_GEMM_FLAG_TRANS_B) \
+  | (('n' == (VNNIA) || *"N" == (VNNIA)) ? LIBXSMM_GEMM_FLAG_NONE : LIBXSMM_GEMM_FLAG_VNNI_A) \
+  | (('n' == (VNNIB) || *"N" == (VNNIB)) ? LIBXSMM_GEMM_FLAG_NONE : LIBXSMM_GEMM_FLAG_VNNI_B))
 
 /** Helper macro allowing NULL-requests (transposes) supplied by some default. */
 #define LIBXSMM_GEMM_PFLAGS(TRANSA, TRANSB, DEFAULT) LIBXSMM_GEMM_FLAGS( \
@@ -223,21 +237,25 @@
   } \
 }
 
-/** Map to appropriate BLAS function (or fall-back). The mapping is used e.g., inside of LIBXSMM_BLAS_XGEMM. */
+#if (defined(LIBXSMM_INIT) || defined(LIBXSMM_CTOR))
+# undef LIBXSMM_INIT
+# define LIBXSMM_INIT LIBXSMM_ASSERT_MSG(1 < libxsmm_ninit, "LIBXSMM is not initialized");
+# define LIBXSMM_INIT_COMPLETED
+#else
+# define LIBXSMM_INIT if (2 > libxsmm_ninit) libxsmm_init();
+#endif
+
+/** Map to appropriate BLAS function (or fall-back). The mapping is used, e.g., inside of LIBXSMM_BLAS_XGEMM. */
 #define LIBXSMM_BLAS_FUNCTION(ITYPE, OTYPE, FUNCTION) LIBXSMM_CONCATENATE(LIBXSMM_BLAS_FUNCTION_, LIBXSMM_TPREFIX2(ITYPE, OTYPE, FUNCTION))
 #if (0 != LIBXSMM_BLAS) /* Helper macro to eventually (if defined) call libxsmm_init */
-# if (defined(LIBXSMM_INIT) || defined(LIBXSMM_CTOR))
+# if defined(LIBXSMM_INIT_COMPLETED)
 #   define LIBXSMM_BLAS_FUNCTION_dgemm_batch libxsmm_original_dgemm_batch_function
 #   define LIBXSMM_BLAS_FUNCTION_sgemm_batch libxsmm_original_sgemm_batch_function
 #   define LIBXSMM_BLAS_FUNCTION_dgemm libxsmm_original_dgemm_function
 #   define LIBXSMM_BLAS_FUNCTION_sgemm libxsmm_original_sgemm_function
 #   define LIBXSMM_BLAS_FUNCTION_dgemv libxsmm_original_dgemv_function
 #   define LIBXSMM_BLAS_FUNCTION_sgemv libxsmm_original_sgemv_function
-#   undef LIBXSMM_INIT
-#   define LIBXSMM_INIT LIBXSMM_ASSERT_MSG(0 != libxsmm_ninit, "LIBXSMM is not initialized");
-#   define LIBXSMM_INIT_COMPLETED
 # else
-#   define LIBXSMM_INIT if (0 == libxsmm_ninit) libxsmm_init();
 #   define LIBXSMM_BLAS_FUNCTION_dgemm_batch libxsmm_original_dgemm_batch()
 #   define LIBXSMM_BLAS_FUNCTION_sgemm_batch libxsmm_original_sgemm_batch()
 #   define LIBXSMM_BLAS_FUNCTION_dgemm libxsmm_original_dgemm()
@@ -246,13 +264,6 @@
 #   define LIBXSMM_BLAS_FUNCTION_sgemv libxsmm_original_sgemv()
 # endif
 #else /* no BLAS */
-# if (defined(LIBXSMM_INIT) || defined(LIBXSMM_CTOR))
-#   undef LIBXSMM_INIT
-#   define LIBXSMM_INIT LIBXSMM_ASSERT_MSG(0 != libxsmm_ninit, "LIBXSMM is not initialized");
-#   define LIBXSMM_INIT_COMPLETED
-# else
-#   define LIBXSMM_INIT if (0 == libxsmm_ninit) libxsmm_init();
-# endif
 # define LIBXSMM_BLAS_FUNCTION_dgemm_batch libxsmm_blas_error("dgemm_batch")
 # define LIBXSMM_BLAS_FUNCTION_sgemm_batch libxsmm_blas_error("sgemm_batch")
 # define LIBXSMM_BLAS_FUNCTION_dgemm libxsmm_blas_error("dgemm")
@@ -326,7 +337,7 @@
 /** Condition based on arithmetic intensity (AI) */
 #define LIBXSMM_SMM_AI(M, N, K, S, TYPESIZE) \
     ((LIBXSMM_MNK_SIZE(M, N, K) * 2) <= ((size_t)(TYPESIZE) * 4/*AI*/ * LIBXSMM_SIZE(M, N, K, S)))
-/** Determine whether an SMM is suitable i.e., small enough. */
+/** Determine whether an SMM is suitable, i.e., small enough. */
 #if !defined(LIBXSMM_THRESHOLD_AI) /* traditional MNK-threshold */
 # define LIBXSMM_SMM(M, N, K, S, TYPESIZE) (LIBXSMM_MNK_SIZE(M, N, K) <= (LIBXSMM_MAX_MNK))
 #else /* threshold based on arithmetic intensity */
@@ -445,8 +456,8 @@
 /**
  * Utility function, which either prints information about the GEMM call
  * or dumps (FILE/ostream=0) all input and output data into MHD files.
- * The Meta Image Format (MHD) is suitable for visual inspection using e.g.,
- * ITK-SNAP or ParaView.
+ * The Meta Image Format (MHD) is suitable for visual inspection using,
+ * e.g., ITK-SNAP or ParaView.
  */
 LIBXSMM_API void libxsmm_gemm_print(void* ostream,
   libxsmm_gemm_precision precision, const char* transa, const char* transb,
@@ -488,18 +499,18 @@ LIBXSMM_EXTERN_C typedef LIBXSMM_RETARGETABLE void (*libxsmm_sgemv_function)(LIB
 LIBXSMM_EXTERN_C typedef LIBXSMM_RETARGETABLE void (*libxsmm_sink_function)(LIBXSMM_VARIADIC);
 
 /** The original BLAS functions. */
-LIBXSMM_APIVAR_ALIGNED(/*volatile*/libxsmm_dgemm_batch_function libxsmm_original_dgemm_batch_function);
-LIBXSMM_APIVAR_ALIGNED(/*volatile*/libxsmm_sgemm_batch_function libxsmm_original_sgemm_batch_function);
-LIBXSMM_APIVAR_ALIGNED(/*volatile*/libxsmm_dgemm_function libxsmm_original_dgemm_function);
-LIBXSMM_APIVAR_ALIGNED(/*volatile*/libxsmm_sgemm_function libxsmm_original_sgemm_function);
-LIBXSMM_APIVAR_ALIGNED(/*volatile*/libxsmm_dgemv_function libxsmm_original_dgemv_function);
-LIBXSMM_APIVAR_ALIGNED(/*volatile*/libxsmm_sgemv_function libxsmm_original_sgemv_function);
-LIBXSMM_API_EXPORT libxsmm_dgemm_batch_function libxsmm_original_dgemm_batch(void);
-LIBXSMM_API_EXPORT libxsmm_sgemm_batch_function libxsmm_original_sgemm_batch(void);
-LIBXSMM_API_EXPORT libxsmm_dgemm_function libxsmm_original_dgemm(void);
-LIBXSMM_API_EXPORT libxsmm_sgemm_function libxsmm_original_sgemm(void);
-LIBXSMM_API_EXPORT libxsmm_dgemv_function libxsmm_original_dgemv(void);
-LIBXSMM_API_EXPORT libxsmm_sgemv_function libxsmm_original_sgemv(void);
+LIBXSMM_APIVAR_PUBLIC(/*volatile*/libxsmm_dgemm_batch_function libxsmm_original_dgemm_batch_function);
+LIBXSMM_APIVAR_PUBLIC(/*volatile*/libxsmm_sgemm_batch_function libxsmm_original_sgemm_batch_function);
+LIBXSMM_APIVAR_PUBLIC(/*volatile*/libxsmm_dgemm_function libxsmm_original_dgemm_function);
+LIBXSMM_APIVAR_PUBLIC(/*volatile*/libxsmm_sgemm_function libxsmm_original_sgemm_function);
+LIBXSMM_APIVAR_PUBLIC(/*volatile*/libxsmm_dgemv_function libxsmm_original_dgemv_function);
+LIBXSMM_APIVAR_PUBLIC(/*volatile*/libxsmm_sgemv_function libxsmm_original_sgemv_function);
+LIBXSMM_API libxsmm_dgemm_batch_function libxsmm_original_dgemm_batch(void);
+LIBXSMM_API libxsmm_sgemm_batch_function libxsmm_original_sgemm_batch(void);
+LIBXSMM_API libxsmm_dgemm_function libxsmm_original_dgemm(void);
+LIBXSMM_API libxsmm_sgemm_function libxsmm_original_sgemm(void);
+LIBXSMM_API libxsmm_dgemv_function libxsmm_original_dgemv(void);
+LIBXSMM_API libxsmm_sgemv_function libxsmm_original_sgemv(void);
 LIBXSMM_API libxsmm_sink_function libxsmm_blas_error(const char* symbol);
 LIBXSMM_API void libxsmm_sink(LIBXSMM_VARIADIC);
 

@@ -12,6 +12,14 @@
 #define MAGAZINE_H
 
 #include <stdio.h>
+#if defined(_OPENMP)
+# include <omp.h>
+#endif
+#if defined(_WIN32)
+# include <Windows.h>
+#else
+# include <sys/time.h>
+#endif
 
 #if !defined(TYPE)
 # define TYPE double
@@ -29,16 +37,32 @@
 #endif
 #if 0
 # define STREAM_C(EXPR) (EXPR)
+# define SYNC(IDX, INC, END) ((IDX) * (INC))
+#elif defined(_OPENMP)
+# define STREAM_C(EXPR) (EXPR)
+# define SYNC(IDX, INC, END) (((1048573 * omp_get_thread_num()) % (END)) * (INC))
 #else
 # define STREAM_C(EXPR) 0
 /* synchronization among C matrices */
-# define SYNC
+# define SYNC(IDX, INC, END) 0
 #endif
 
-#if 1 /* PAD (alignment) must be power of two */
+/**
+ * Permuting the data introduces a dependency to LIBXSMM
+ * even for the Eigen/Blaze/Blas based sample code.
+ */
+#if 0 /* process batch of A, B, and C in "random" order */
+# define SHUFFLE
+#endif
+
+#if 0 /* PAD (alignment) must be power of two */
 # define PAD 64
 #else
 # define PAD 1
+#endif
+
+#if defined(SHUFFLE)
+# include <libxsmm_source.h>
 #endif
 
 
@@ -71,6 +95,22 @@ static double norm(const TYPE* src, int nrows, int ncols, int ld) {
     }
   }
   return result;
+}
+
+
+static double seconds(void) {
+#if defined(_OPENMP)
+  return omp_get_wtime();
+#elif defined(_WIN32)
+  LARGE_INTEGER t, f;
+  QueryPerformanceCounter(&t);
+  QueryPerformanceFrequency(&f);
+  return (double)t.QuadPart / f.QuadPart;
+#else
+  struct timeval t;
+  gettimeofday(&t, 0);
+  return 1E-6 * (1000000ULL * t.tv_sec + t.tv_usec);
+#endif
 }
 
 #endif /*MAGAZINE_H*/

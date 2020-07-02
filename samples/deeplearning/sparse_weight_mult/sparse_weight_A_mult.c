@@ -10,14 +10,16 @@
 ******************************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <libxsmm.h>
 
 int main(int argc, char* argv[]) {
-  unsigned int N =     ( argc == 6 ) ? atoi(argv[1]) : 64;
-  unsigned int C =     ( argc == 6 ) ? atoi(argv[2]) : 512;
-  unsigned int K =     ( argc == 6 ) ? atoi(argv[3]) : 32;
-  double sparse_frac = ( argc == 6 ) ? atof(argv[4]) : 0.90;
-  unsigned int REPS  = ( argc == 6 ) ? atoi(argv[5]) : 1;
+  unsigned int N =     ( argc > 1 ) ? atoi(argv[1]) : 64;
+  unsigned int C =     ( argc > 2 ) ? atoi(argv[2]) : 512;
+  unsigned int K =     ( argc > 3 ) ? atoi(argv[3]) : 32;
+  unsigned int nb =    ( argc > 4 ) ? atoi(argv[4]) : 16;
+  double sparse_frac = ( argc > 5 ) ? atof(argv[5]) : 0.90;
+  unsigned int REPS  = ( argc > 6 ) ? atoi(argv[6]) : 1;
 
   const libxsmm_gemm_prefetch_type prefetch = LIBXSMM_GEMM_PREFETCH_NONE;
   const int flags = LIBXSMM_GEMM_FLAGS('N', 'N');
@@ -33,11 +35,12 @@ int main(int argc, char* argv[]) {
   float l_max_error = 0.0;
   unsigned int l_k, l_n;
   unsigned int l_i, l_j, l_jj;
+  unsigned int NB = N / nb;
 
-  LIBXSMM_VLA_DECL(2, float, l_p_a_de, l_a_de, K);
-  LIBXSMM_VLA_DECL(3, float, l_p_b, l_b, N/16, 16);
-  LIBXSMM_VLA_DECL(3, float, l_p_c_asm_csr, l_c_asm_csr, N/16, 16);
-  LIBXSMM_VLA_DECL(3, float, l_p_c_gold, l_c_gold, N/16, 16);
+  LIBXSMM_VLA_DECL(2, float, l_p_a_de, l_a_de, C);
+  LIBXSMM_VLA_DECL(3, float, l_p_b, l_b, NB, nb);
+  LIBXSMM_VLA_DECL(3, float, l_p_c_asm_csr, l_c_asm_csr, NB, nb);
+  LIBXSMM_VLA_DECL(3, float, l_p_c_gold, l_c_gold, NB, nb);
 
   libxsmm_descriptor_blob l_xgemm_blob;
   const libxsmm_gemm_descriptor* l_xgemm_desc = 0;
@@ -45,21 +48,17 @@ int main(int argc, char* argv[]) {
 
   unsigned long long l_start, l_end;
   double l_total;
-  unsigned int NB, nb;
   unsigned int nnz = 0;
 
-  if (argc != 6 && argc != 1) {
+  if (argc != 7 && argc != 1) {
     fprintf( stderr, "arguments failure\n" );
     return -1;
   }
 
-  if ( N % 16 != 0 ) {
-    fprintf( stderr, "N needs to be disable by 16\n" );
+  if ( N % nb != 0 ) {
+    fprintf( stderr, "N needs to be disable by nb\n" );
     return -1;
   }
-
-  NB = N / 16;
-  nb = 16;
 
   /* touch B */
   for ( l_i = 0; l_i < C; l_i++) {
@@ -73,9 +72,9 @@ int main(int argc, char* argv[]) {
   /* touch dense A */
   for ( l_i = 0; l_i < K; l_i++ ) {
     for ( l_j = 0; l_j < C; l_j++ ) {
-      double tmp = libxsmm_rng_f64();
+      float tmp = (float)libxsmm_rng_f64();
       if ( tmp < sparse_frac ) {
-        tmp = (double)0;
+        tmp = 0;
       } else {
         nnz++;
       }
@@ -88,8 +87,8 @@ int main(int argc, char* argv[]) {
   for ( l_i = 0; l_i < K; l_i++) {
     for ( l_j = 0; l_j < NB; l_j++) {
       for ( l_k = 0; l_k < nb; l_k++ ) {
-        LIBXSMM_VLA_ACCESS(3, l_p_c_gold, l_i, l_j, l_k, NB, nb) = (float)0.0;
-        LIBXSMM_VLA_ACCESS(3, l_p_c_asm_csr,  l_i, l_j, l_k, NB, nb) = (float)0.0;
+        LIBXSMM_VLA_ACCESS(3, l_p_c_gold, l_i, l_j, l_k, NB, nb) = 0.f;
+        LIBXSMM_VLA_ACCESS(3, l_p_c_asm_csr,  l_i, l_j, l_k, NB, nb) = 0.f;
       }
     }
   }
@@ -138,7 +137,7 @@ int main(int argc, char* argv[]) {
     K, NB, C, 0, NB, NB, alpha, beta, flags, prefetch);
 
   /* sparse routine */
-  mykernel_csr = libxsmm_create_xcsr_soa(l_xgemm_desc, l_rowptr, l_colidx, (const void*)l_a_sp_csr).smm;
+  mykernel_csr = libxsmm_create_xcsr_soa(l_xgemm_desc, l_rowptr, l_colidx, (const void*)l_a_sp_csr, nb).smm;
 
   l_start = libxsmm_timer_tick();
   for ( l_n = 0; l_n < REPS; l_n++) {
@@ -150,7 +149,7 @@ int main(int argc, char* argv[]) {
   printf("%f GFLOPS for sparse (asm, csr)\n", ((double)((double)REPS * (double)N * (double)C * (double)K) * 2.0) / (l_total * 1.0e9));
 
   /* check for errors */
-  l_max_error = (float)0.0;
+  l_max_error = 0.f;
   for ( l_i = 0; l_i < NB; l_i++) {
     for ( l_j = 0; l_j < K; l_j++) {
       for ( l_k = 0; l_k < nb; l_k++ ) {

@@ -210,6 +210,8 @@ int main(int argc, char* argv[]) {
 
   unsigned long long l_start, l_end;
   double l_total;
+  unsigned long long l_libxsmmflops;
+  libxsmm_kernel_info l_kinfo;
 
   if (argc != 7) {
     fprintf( stderr, "arguments: M CRUNS #iters csc-file!\n" );
@@ -310,12 +312,12 @@ int main(int argc, char* argv[]) {
   /* sparse routine */
 #if defined(__EDGE_EXECUTE_F32__)
   if ( libxsmm_get_target_archid() == LIBXSMM_X86_AVX512_KNM ) {
-    mykernel = libxsmm_create_xcsc_soa(l_xgemm_desc, l_colptr_padded, l_rowidx_padded, (const void*)l_b_sp).smm;
+    mykernel = libxsmm_create_xcsc_soa(l_xgemm_desc, l_colptr_padded, l_rowidx_padded, (const void*)l_b_sp, N_CRUNS).smm;
   } else {
-    mykernel = libxsmm_create_xcsc_soa(l_xgemm_desc, l_colptr, l_rowidx, (const void*)l_b_sp).smm;
+    mykernel = libxsmm_create_xcsc_soa(l_xgemm_desc, l_colptr, l_rowidx, (const void*)l_b_sp, N_CRUNS).smm;
   }
 #else
-  mykernel = libxsmm_create_xcsc_soa(l_xgemm_desc, l_colptr, l_rowidx, (const void*)l_b_sp).dmm;
+  mykernel = libxsmm_create_xcsc_soa(l_xgemm_desc, l_colptr, l_rowidx, (const void*)l_b_sp, N_CRUNS).dmm;
 #endif
 
   if ( libxsmm_get_target_archid() == LIBXSMM_X86_AVX512_KNM ) {
@@ -336,8 +338,11 @@ int main(int argc, char* argv[]) {
     l_end = libxsmm_timer_tick();
   }
   l_total = libxsmm_timer_duration(l_start, l_end);
+  libxsmm_get_kernel_info( LIBXSMM_CONST_VOID_PTR(mykernel), &l_kinfo);
+  l_libxsmmflops = l_kinfo.nflops;
   printf("%fs for sparse (asm)\n", l_total);
-  printf("%f GFLOPS for sparse (asm)\n", ((double)((double)REPS * (double)M * (double)l_elements * (double)N_CRUNS) * 2.0) / (l_total * 1.0e9));
+  printf("%f GFLOPS for sparse (asm), calculated\n", ((double)((double)REPS * (double)M * (double)l_elements * (double)N_CRUNS) * 2.0) / (l_total * 1.0e9));
+  printf("%f GFLOPS for sparse (asm), libxsmm   \n", ((double)((double)REPS * (double)l_libxsmmflops)) / (l_total * 1.0e9));
 
   /* check for errors */
   l_max_error = (REALTYPE)0.0;

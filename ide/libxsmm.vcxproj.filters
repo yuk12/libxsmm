@@ -183,13 +183,7 @@
     <ClInclude Include="..\include\libxsmm_dnn_fullyconnected.h">
       <Filter>include</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\libxsmm_dnn_fullyconnected_backward.h">
-      <Filter>src</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\libxsmm_dnn_fullyconnected_forward.h">
-      <Filter>src</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\libxsmm_dnn_fullyconnected_weight_update.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\src\libxsmm_dnn_pooling_backward.h">
@@ -272,6 +266,27 @@
     </ClInclude>
     <ClInclude Include="..\src\libxsmm_dnn_fusedgroupnorm_forward.h">
       <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\generator_spgemm_csc_csparse_soa.h">
+      <Filter>src\generator</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libxsmm_dnn_fullyconnected_backward_weight_update.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libxsmm_dnn_optimizer_sgd.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libxsmm_dnn_softmaxloss_backward.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\libxsmm_dnn_softmaxloss_forward.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\template\libxsmm_version.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\generator_mateltwise_avx_avx512.h">
+      <Filter>src\generator</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -515,22 +530,10 @@
     <ClCompile Include="..\src\libxsmm_dnn_pooling.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\libxsmm_dnn_fullyconnected_backward.c">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\libxsmm_dnn_fullyconnected_forward.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\libxsmm_dnn_fullyconnected_weight_update.c">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwd_custom_generic.tpl.c">
-      <Filter>src\template</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_fwd_custom_generic.tpl.c">
-      <Filter>src\template</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_upd_custom_generic.tpl.c">
       <Filter>src\template</Filter>
     </ClCompile>
     <ClCompile Include="..\src\template\libxsmm_dnn_fusedbatchnorm_st_bwd_custom_f32_bf16_c16_avx512.tpl.c">
@@ -596,13 +599,7 @@
     <ClCompile Include="..\src\generator_packed.c">
       <Filter>src\generator</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwd_ncnc_kcck_generic.tpl.c">
-      <Filter>src\template</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_fwd_ncnc_kcck_generic.tpl.c">
-      <Filter>src\template</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_upd_ncnc_kcck_generic.tpl.c">
       <Filter>src\template</Filter>
     </ClCompile>
     <ClCompile Include="..\src\libxsmm_rng.c">
@@ -772,6 +769,57 @@
     </ClCompile>
     <ClCompile Include="..\src\libxsmm_dnn_fusedgroupnorm_forward.c">
       <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\generator_spgemm_csc_csparse_soa.c">
+      <Filter>src\generator</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwdupd_custom_generic.tpl.c">
+      <Filter>src\template</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwdupd_ncnc_kcck_generic.tpl.c">
+      <Filter>src\template</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwdupd_ncnc_kcck_generic_bf16.tpl.c">
+      <Filter>src\template</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libxsmm_dnn_fullyconnected_backward_weight_update.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_convolve_st_fwd_custom_custom_generic_i8i8.tpl.c">
+      <Filter>src\template</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_convolve_st_fwd_custom_custom_generic_i8i32.tpl.c">
+      <Filter>src\template</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libxsmm_dnn_optimizer.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libxsmm_dnn_optimizer_sgd.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libxsmm_dnn_softmaxloss.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libxsmm_dnn_softmaxloss_backward.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\libxsmm_dnn_softmaxloss_forward.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_optimizer_sgd_st_generic.tpl.c">
+      <Filter>src\template</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_softmaxloss_st_bwd_ncnc_generic.tpl.c">
+      <Filter>src\template</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_softmaxloss_st_fwd_ncnc_generic.tpl.c">
+      <Filter>src\template</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\generator_mateltwise.c">
+      <Filter>src\generator</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\generator_mateltwise_avx_avx512.c">
+      <Filter>src\generator</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

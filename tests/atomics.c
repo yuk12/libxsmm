@@ -9,7 +9,6 @@
 /* Hans Pabst (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm_source.h>
-#include <stdlib.h>
 
 #if !defined(ATOMIC_KIND)
 # define ATOMIC_KIND LIBXSMM_ATOMIC_RELAXED

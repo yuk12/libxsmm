@@ -15,42 +15,12 @@
 #include "libxsmm_dnn_tensor.h"
 #include "libxsmm_dnn_fusedbatchnorm.h"
 
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
-#endif
-#include <stdlib.h>
-#if !defined(NDEBUG)
-# include <stdio.h>
-#endif
-#if defined(LIBXSMM_OFFLOAD_TARGET)
-# pragma offload_attribute(pop)
-#endif
-
 /** Opaque handles which represents convolutions and LIBXSMM datatypes */
 LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_dnn_layer libxsmm_dnn_layer;
 
 typedef enum libxsmm_dnn_conv_fuse_op {
   /* we fuse nothing into convolution */
-  LIBXSMM_DNN_CONV_FUSE_NONE = 0,
-  /* we fuse bias addition into convolution */
-  LIBXSMM_DNN_CONV_FUSE_BIAS = 1,
-  /* we fuse ReLU calculation into fwd convolution op */
-  LIBXSMM_DNN_CONV_FUSE_RELU_FWD = 2,
-  /* we fuse ReLU calculation into bwd convolution op */
-  LIBXSMM_DNN_CONV_FUSE_RELU_BWD = 4,
-  /* we fuse batch stats */
-  LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD = 8,
-  LIBXSMM_DNN_CONV_FUSE_MAX_STATS = 16,
-  LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_BWD = 32,
-  LIBXSMM_DNN_CONV_FUSE_ELTWISE_BWD = 64,
-  LIBXSMM_DNN_CONV_FUSE_BATCHNORM_STATS = 128,
-  LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD_RELU_BWD = LIBXSMM_DNN_CONV_FUSE_RELU_BWD | LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD,
-  LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD_RELU_BWD_AND_MAX = LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD_RELU_BWD | LIBXSMM_DNN_CONV_FUSE_MAX_STATS,
-  LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD_AND_MAX = LIBXSMM_DNN_CONV_FUSE_BATCH_STATS_FWD |  LIBXSMM_DNN_CONV_FUSE_MAX_STATS,
-  LIBXSMM_DNN_CONV_FUSE_RELU_BWD_AND_MAX = LIBXSMM_DNN_CONV_FUSE_RELU_BWD | LIBXSMM_DNN_CONV_FUSE_MAX_STATS,
-    /* we fuse bias addition and ReLU into convolution op */
-  LIBXSMM_DNN_CONV_FUSE_RELU = LIBXSMM_DNN_CONV_FUSE_RELU_FWD | LIBXSMM_DNN_CONV_FUSE_RELU_BWD,
-  LIBXSMM_DNN_CONV_FUSE_BIAS_RELU = LIBXSMM_DNN_CONV_FUSE_BIAS | LIBXSMM_DNN_CONV_FUSE_RELU
+  LIBXSMM_DNN_CONV_FUSE_NONE = 0
 } libxsmm_dnn_conv_fuse_op;
 
 /** Type of algorithm used for convolutions. */
@@ -91,8 +61,6 @@ LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_dnn_conv_desc {
   libxsmm_dnn_conv_algo algo;               /* convolution algorithm used */
   libxsmm_dnn_conv_option options;          /* additional options */
   libxsmm_dnn_conv_fuse_op fuse_ops;        /* used ops into convolutions */
-  libxsmm_dnn_fusedbatchnorm *pre_bn;       /* pointer to pre bn layer to accommodate bn fusion */
-  libxsmm_dnn_fusedbatchnorm *post_bn;      /* pointer to post bn layer to accommodate bn fusion */
 } libxsmm_dnn_conv_desc;
 
 /** Create a layer handle (non-NULL if successful), and pre-build all JIT-code versions. */
@@ -120,10 +88,6 @@ LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_execute_st(libxsmm_dnn_layer* handle, 
 /** some helper functions for framework integration */
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_trans_reg_filter(const libxsmm_dnn_layer* handle);
 LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_trans_reg_bf16_filter(const libxsmm_dnn_layer* handle);
-LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_transpose_filter(libxsmm_dnn_layer* handle, const libxsmm_dnn_tensor_type type);
-LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_reduce_wu_filters(libxsmm_dnn_layer* handle, const libxsmm_dnn_tensor_type type);
-LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_get_codegen_success(libxsmm_dnn_layer* handle, libxsmm_dnn_compute_kind kind);
-LIBXSMM_API libxsmm_dnn_err_t libxsmm_dnn_get_parallel_tasks(libxsmm_dnn_layer* handle, libxsmm_dnn_compute_kind kind, unsigned int* num_tasks);
 
 #endif /*LIBXSMM_DNN_CONVOLUTION_H*/
 

@@ -91,6 +91,7 @@
 #define LIBXSMM_EXPAND(...) __VA_ARGS__
 #define LIBXSMM_ELIDE(...)
 
+/** Use LIBXSMM_VERSION2 instead of LIBXSMM_VERSION3, e.g., if __GNUC_PATCHLEVEL__ or __clang_patchlevel__ is zero (0). */
 #define LIBXSMM_VERSION2(MAJOR, MINOR) ((MAJOR) * 10000 + (MINOR) * 100)
 #define LIBXSMM_VERSION3(MAJOR, MINOR, UPDATE) (LIBXSMM_VERSION2(MAJOR, MINOR) + (UPDATE))
 #define LIBXSMM_VERSION4(MAJOR, MINOR, UPDATE, PATCH) (int) \
@@ -136,10 +137,12 @@
 #   define LIBXSMM_UNPACKED
 # endif
 #endif
-#if defined(LIBXSMM_UNPACKED)
-# define LIBXSMM_PAD(EXPR)
-#else /* no braces around EXPR */
+#if !defined(LIBXSMM_UNPACKED) && 0
+/* no braces around EXPR */
 # define LIBXSMM_PAD(EXPR) EXPR;
+#endif
+#if !defined(LIBXSMM_PAD)
+# define LIBXSMM_PAD(EXPR)
 #endif
 
 #if defined(__INTEL_COMPILER)
@@ -153,11 +156,17 @@
 #endif
 
 /* LIBXSMM_ATTRIBUTE_USED: mark library functions as used to avoid warning */
-#if defined(__GNUC__) || (defined(LIBXSMM_INTEL_COMPILER) && !defined(_WIN32))
+#if defined(__GNUC__) || defined(__clang__) || (defined(__INTEL_COMPILER) && !defined(_WIN32))
+# if !defined(__cplusplus) || !defined(__clang__)
+#   define LIBXSMM_ATTRIBUTE_COMMON LIBXSMM_ATTRIBUTE(common)
+# else
+#   define LIBXSMM_ATTRIBUTE_COMMON
+# endif
 # define LIBXSMM_ATTRIBUTE_MALLOC LIBXSMM_ATTRIBUTE(malloc)
 # define LIBXSMM_ATTRIBUTE_UNUSED LIBXSMM_ATTRIBUTE(unused)
 # define LIBXSMM_ATTRIBUTE_USED LIBXSMM_ATTRIBUTE(used)
 #else
+# define LIBXSMM_ATTRIBUTE_COMMON
 # define LIBXSMM_ATTRIBUTE_MALLOC
 # define LIBXSMM_ATTRIBUTE_UNUSED
 # define LIBXSMM_ATTRIBUTE_USED
@@ -165,9 +174,8 @@
 
 #if defined(__cplusplus)
 # define LIBXSMM_VARIADIC ...
-# define LIBXSMM_EXTERN_KEYWORD extern "C"
-# define LIBXSMM_EXTERN LIBXSMM_EXTERN_KEYWORD
-# define LIBXSMM_EXTERN_C LIBXSMM_EXTERN_KEYWORD
+# define LIBXSMM_EXTERN extern "C"
+# define LIBXSMM_EXTERN_C extern "C"
 # define LIBXSMM_INLINE_KEYWORD inline
 # define LIBXSMM_INLINE LIBXSMM_INLINE_KEYWORD
 # if defined(__GNUC__) || defined(_CRAYC)
@@ -178,10 +186,9 @@
 # else
 #   define LIBXSMM_CALLER __FUNCNAME__
 # endif
-#else
+#else /* C */
 # define LIBXSMM_VARIADIC
-# define LIBXSMM_EXTERN_KEYWORD extern
-# define LIBXSMM_EXTERN LIBXSMM_EXTERN_KEYWORD
+# define LIBXSMM_EXTERN extern
 # define LIBXSMM_EXTERN_C
 # if defined(__STDC_VERSION__) && (199901L <= __STDC_VERSION__) /*C99*/
 #   define LIBXSMM_PRAGMA(DIRECTIVE) _Pragma(LIBXSMM_STRINGIFY(DIRECTIVE))
@@ -259,59 +266,65 @@
 # define LIBXSMM_VISIBILITY_IMPORT LIBXSMM_ATTRIBUTE(dllimport)
 #endif
 #if !defined(LIBXSMM_VISIBILITY_EXPORT)
-# define LIBXSMM_VISIBILITY_EXPORT LIBXSMM_EXTERN_C LIBXSMM_VISIBILITY_PUBLIC
+# define LIBXSMM_VISIBILITY_EXPORT LIBXSMM_VISIBILITY_PUBLIC
 #endif
 #if !defined(LIBXSMM_VISIBILITY_IMPORT)
-# define LIBXSMM_VISIBILITY_IMPORT LIBXSMM_EXTERN_KEYWORD LIBXSMM_VISIBILITY_PUBLIC
+# define LIBXSMM_VISIBILITY_IMPORT LIBXSMM_VISIBILITY_PUBLIC
 #endif
 
-#if defined(LIBXSMM_API) /* header-only mode */
-# define LIBXSMM_API_INTERN LIBXSMM_API
-# define LIBXSMM_API_EXPORT LIBXSMM_API
-# define LIBXSMM_APIVAR_PUBLIC(DECL) LIBXSMM_EXTERN_C LIBXSMM_RETARGETABLE DECL; LIBXSMM_RETARGETABLE DECL
-# define LIBXSMM_APIVAR(DECL) LIBXSMM_APIVAR_PUBLIC(DECL)
-# define LIBXSMM_APIEXT_INTERN LIBXSMM_API_INTERN
-# define LIBXSMM_APIEXT LIBXSMM_APIEXT_INTERN
+#if defined(LIBXSMM_SOURCE_H) /* header-only mode */
+# define LIBXSMM_API_VISIBILITY_EXPORT
+# define LIBXSMM_API_VISIBILITY_IMPORT
+# define LIBXSMM_API_VISIBILITY_INTERN
+# define LIBXSMM_API_COMMON LIBXSMM_RETARGETABLE LIBXSMM_ATTRIBUTE_COMMON
+# define LIBXSMM_API_TARGET LIBXSMM_API_INLINE
+# define LIBXSMM_API_EXTERN LIBXSMM_EXTERN_C
 #else /* classic ABI */
 # if defined(LIBXSMM_BUILD_EXT)
-#   define LIBXSMM_API LIBXSMM_VISIBILITY_IMPORT LIBXSMM_RETARGETABLE
-#   define LIBXSMM_API_INTERN LIBXSMM_VISIBILITY_PRIVATE LIBXSMM_RETARGETABLE
-#   define LIBXSMM_API_EXPORT LIBXSMM_EXTERN_C LIBXSMM_API
-#   define LIBXSMM_APIVAR_PUBLIC(DECL) LIBXSMM_API DECL; LIBXSMM_API DECL
-#   define LIBXSMM_APIVAR(DECL) LIBXSMM_EXTERN_C LIBXSMM_VISIBILITY_PRIVATE LIBXSMM_RETARGETABLE DECL; \
-                                LIBXSMM_EXTERN_C LIBXSMM_VISIBILITY_PRIVATE LIBXSMM_RETARGETABLE DECL
-#   define LIBXSMM_APIEXT LIBXSMM_VISIBILITY_EXPORT LIBXSMM_RETARGETABLE
-#   define LIBXSMM_APIEXT_INTERN LIBXSMM_API_INTERN
+#   define LIBXSMM_API_VISIBILITY_EXPORT LIBXSMM_VISIBILITY_IMPORT
+#   define LIBXSMM_API_VISIBILITY_IMPORT LIBXSMM_VISIBILITY_EXPORT
+#   define LIBXSMM_API_VISIBILITY_INTERN LIBXSMM_VISIBILITY_PRIVATE
 # elif defined(LIBXSMM_BUILD)
-#   define LIBXSMM_API LIBXSMM_VISIBILITY_EXPORT LIBXSMM_RETARGETABLE
-#   define LIBXSMM_API_INTERN LIBXSMM_VISIBILITY_PRIVATE LIBXSMM_RETARGETABLE
-#   define LIBXSMM_API_EXPORT LIBXSMM_API
-#   define LIBXSMM_APIVAR_PUBLIC(DECL) LIBXSMM_VISIBILITY_EXPORT LIBXSMM_RETARGETABLE DECL; \
-                                       LIBXSMM_VISIBILITY_EXPORT LIBXSMM_RETARGETABLE DECL
-#   define LIBXSMM_APIVAR(DECL) LIBXSMM_EXTERN_C LIBXSMM_VISIBILITY_PRIVATE LIBXSMM_RETARGETABLE DECL; \
-                                LIBXSMM_EXTERN_C LIBXSMM_VISIBILITY_PRIVATE LIBXSMM_RETARGETABLE DECL
-#   define LIBXSMM_APIEXT LIBXSMM_VISIBILITY_IMPORT LIBXSMM_RETARGETABLE
+#   define LIBXSMM_API_VISIBILITY_EXPORT LIBXSMM_VISIBILITY_EXPORT
+#   define LIBXSMM_API_VISIBILITY_IMPORT LIBXSMM_VISIBILITY_IMPORT
+#   define LIBXSMM_API_VISIBILITY_INTERN LIBXSMM_VISIBILITY_PRIVATE
 # else /* import */
-#   define LIBXSMM_API LIBXSMM_VISIBILITY_IMPORT LIBXSMM_RETARGETABLE
-#   define LIBXSMM_API_INTERN LIBXSMM_API
-#   define LIBXSMM_API_EXPORT LIBXSMM_API
-#   define LIBXSMM_APIVAR_PUBLIC(DECL) LIBXSMM_VISIBILITY_IMPORT LIBXSMM_RETARGETABLE DECL; \
-                                       LIBXSMM_VISIBILITY_IMPORT LIBXSMM_RETARGETABLE DECL
-#   define LIBXSMM_APIVAR(DECL) LIBXSMM_EXTERN_C LIBXSMM_VISIBILITY_PRIVATE LIBXSMM_RETARGETABLE DECL; \
-                                LIBXSMM_EXTERN_C LIBXSMM_VISIBILITY_PRIVATE LIBXSMM_RETARGETABLE DECL
-#   define LIBXSMM_APIEXT LIBXSMM_API
+#   define LIBXSMM_API_VISIBILITY_EXPORT LIBXSMM_VISIBILITY_IMPORT
+#   define LIBXSMM_API_VISIBILITY_IMPORT LIBXSMM_VISIBILITY_IMPORT
+#   define LIBXSMM_API_VISIBILITY_INTERN
 # endif
+# define LIBXSMM_API_COMMON LIBXSMM_RETARGETABLE
+# define LIBXSMM_API_TARGET LIBXSMM_RETARGETABLE
+# define LIBXSMM_API_EXTERN LIBXSMM_EXTERN
 #endif
-#if !defined(_WIN32)
-# define LIBXSMM_APIVAR_PRIVATE(DECL) LIBXSMM_APIVAR(LIBXSMM_ALIGNED(DECL, LIBXSMM_CONFIG_CACHELINE))
-# define LIBXSMM_APIVAR_ALIGNED(DECL) LIBXSMM_APIVAR_PUBLIC(LIBXSMM_ALIGNED(DECL, LIBXSMM_CONFIG_CACHELINE))
-# define LIBXSMM_APIVAR_ARRAY(DECL, N) LIBXSMM_APIVAR(LIBXSMM_ALIGNED(DECL[N], LIBXSMM_CONFIG_CACHELINE))
-#else /* Windows */
-# define LIBXSMM_APIVAR_PRIVATE(DECL) LIBXSMM_APIVAR(DECL)
-# define LIBXSMM_APIVAR_ALIGNED(DECL) LIBXSMM_APIVAR_PUBLIC(DECL)
-# define LIBXSMM_APIVAR_ARRAY(DECL, N) LIBXSMM_APIVAR(DECL[N])
+
+#define LIBXSMM_API_VISIBILITY(VISIBILITY) LIBXSMM_CONCATENATE(LIBXSMM_API_VISIBILITY_, VISIBILITY)
+#define LIBXSMM_APIVAR(DECL, VISIBILITY, EXTERN) EXTERN LIBXSMM_API_COMMON LIBXSMM_API_VISIBILITY(VISIBILITY) DECL
+#define LIBXSMM_API_INLINE LIBXSMM_INLINE LIBXSMM_RETARGETABLE
+#define LIBXSMM_API_DEF
+
+#if (!defined(__INTEL_COMPILER) || !defined(_WIN32))
+#define LIBXSMM_APIVAR_ALIGNED(DECL, VISIBILITY) LIBXSMM_ALIGNED(LIBXSMM_APIVAR(DECL, VISIBILITY, LIBXSMM_API_DEF), LIBXSMM_CONFIG_CACHELINE)
+#else
+#define LIBXSMM_APIVAR_ALIGNED(DECL, VISIBILITY) LIBXSMM_APIVAR(DECL, VISIBILITY, LIBXSMM_API_DEF)
 #endif
-#define LIBXSMM_API_INLINE LIBXSMM_EXTERN_C LIBXSMM_INLINE LIBXSMM_RETARGETABLE
+
+/** Public visible variable declaration (without definition) located in header file. */
+#define LIBXSMM_APIVAR_PUBLIC(DECL) LIBXSMM_APIVAR(DECL, EXPORT, LIBXSMM_API_EXTERN)
+/** Public visible variable definition (complements declaration) located in source file. */
+#define LIBXSMM_APIVAR_PUBLIC_DEF(DECL) LIBXSMM_APIVAR_ALIGNED(DECL, EXPORT)
+/** Private variable declaration (without definition) located in header file. */
+#define LIBXSMM_APIVAR_PRIVATE(DECL) LIBXSMM_APIVAR(DECL, INTERN, LIBXSMM_API_EXTERN)
+/** Private variable definition (complements declaration) located in source file. */
+#define LIBXSMM_APIVAR_PRIVATE_DEF(DECL) LIBXSMM_APIVAR_ALIGNED(DECL, INTERN)
+/** Private variable (declaration and definition) located in source file. */
+#define LIBXSMM_APIVAR_DEFINE(DECL) LIBXSMM_APIVAR_PRIVATE(DECL); LIBXSMM_APIVAR_PRIVATE_DEF(DECL)
+/** Function decoration used for private functions. */
+#define LIBXSMM_API_INTERN LIBXSMM_API_EXTERN LIBXSMM_API_TARGET LIBXSMM_API_VISIBILITY(INTERN)
+/** Function decoration used for public functions of LIBXSMMext library. */
+#define LIBXSMM_APIEXT LIBXSMM_API_EXTERN LIBXSMM_API_TARGET LIBXSMM_API_VISIBILITY(IMPORT)
+/** Function decoration used for public functions of LIBXSMM library. */
+#define LIBXSMM_API LIBXSMM_API_EXTERN LIBXSMM_API_TARGET LIBXSMM_API_VISIBILITY(EXPORT)
 
 #if !defined(LIBXSMM_RESTRICT)
 # if ((defined(__GNUC__) && !defined(__CYGWIN32__)) || defined(LIBXSMM_INTEL_COMPILER)) && !defined(_WIN32)
@@ -331,13 +344,13 @@
 # endif
 #endif /*LIBXSMM_PRAGMA*/
 
-#if !defined(LIBXSMM_OPENMP_SIMD) && (defined(_OPENMP) && (201307 <= _OPENMP)) /*OpenMP 4.0*/
+#if !defined(LIBXSMM_OPENMP_SIMD) && (defined(_OPENMP) && (201307 <= _OPENMP/*v4.0*/))
 # if defined(LIBXSMM_INTEL_COMPILER)
 #   if (1500 <= LIBXSMM_INTEL_COMPILER)
 #     define LIBXSMM_OPENMP_SIMD
 #   endif
 # elif defined(__GNUC__)
-#   if LIBXSMM_VERSION3(4, 9, 0) <= LIBXSMM_VERSION3(__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__)
+#   if LIBXSMM_VERSION2(4, 9) <= LIBXSMM_VERSION2(__GNUC__, __GNUC_MINOR__)
 #     define LIBXSMM_OPENMP_SIMD
 #   endif
 # else
@@ -349,25 +362,24 @@
 # if defined(LIBXSMM_OPENMP_SIMD)
 #   define LIBXSMM_PRAGMA_SIMD_REDUCTION(EXPRESSION) LIBXSMM_PRAGMA(omp simd reduction(EXPRESSION))
 #   define LIBXSMM_PRAGMA_SIMD_COLLAPSE(N) LIBXSMM_PRAGMA(omp simd collapse(N))
-#   define LIBXSMM_PRAGMA_SIMD_PRIVATE(A, ...) LIBXSMM_PRAGMA(omp simd private(A, __VA_ARGS__))
+#   define LIBXSMM_PRAGMA_SIMD_PRIVATE(...) LIBXSMM_PRAGMA(omp simd private(__VA_ARGS__))
 #   define LIBXSMM_PRAGMA_SIMD LIBXSMM_PRAGMA(omp simd)
 # elif defined(__INTEL_COMPILER)
 #   define LIBXSMM_PRAGMA_SIMD_REDUCTION(EXPRESSION) LIBXSMM_PRAGMA(simd reduction(EXPRESSION))
 #   define LIBXSMM_PRAGMA_SIMD_COLLAPSE(N) LIBXSMM_PRAGMA(simd collapse(N))
-#   define LIBXSMM_PRAGMA_SIMD_PRIVATE(A, ...) LIBXSMM_PRAGMA(simd private(A, __VA_ARGS__))
+#   define LIBXSMM_PRAGMA_SIMD_PRIVATE(...) LIBXSMM_PRAGMA(simd private(__VA_ARGS__))
 #   define LIBXSMM_PRAGMA_SIMD LIBXSMM_PRAGMA(simd)
 # endif
 #endif
 #if !defined(LIBXSMM_PRAGMA_SIMD)
 # define LIBXSMM_PRAGMA_SIMD_REDUCTION(EXPRESSION)
 # define LIBXSMM_PRAGMA_SIMD_COLLAPSE(N)
-# define LIBXSMM_PRAGMA_SIMD_PRIVATE(A, ...)
+# define LIBXSMM_PRAGMA_SIMD_PRIVATE(...)
 # define LIBXSMM_PRAGMA_SIMD
 #endif
 
 #if defined(__INTEL_COMPILER)
-# define LIBXSMM_PRAGMA_NONTEMPORAL_VARS(A, ...) LIBXSMM_PRAGMA(vector nontemporal(A, __VA_ARGS__))
-# define LIBXSMM_PRAGMA_NONTEMPORAL LIBXSMM_PRAGMA(vector nontemporal)
+# define LIBXSMM_PRAGMA_NONTEMPORAL(...) LIBXSMM_PRAGMA(vector nontemporal(__VA_ARGS__))
 # define LIBXSMM_PRAGMA_VALIGNED LIBXSMM_PRAGMA(vector aligned)
 # define LIBXSMM_PRAGMA_NOVECTOR LIBXSMM_PRAGMA(novector)
 # define LIBXSMM_PRAGMA_FORCEINLINE LIBXSMM_PRAGMA(forceinline)
@@ -377,30 +389,33 @@
 # define LIBXSMM_PRAGMA_UNROLL LIBXSMM_PRAGMA(unroll)
 # define LIBXSMM_PRAGMA_VALIGNED_VAR(A) LIBXSMM_ASSUME_ALIGNED(A, LIBXSMM_ALIGNMENT);
 /*# define LIBXSMM_UNUSED(VARIABLE) LIBXSMM_PRAGMA(unused(VARIABLE))*/
-#elif defined(__clang__)
-# define LIBXSMM_PRAGMA_NONTEMPORAL_VARS(A, ...)
-# define LIBXSMM_PRAGMA_NONTEMPORAL
-# define LIBXSMM_PRAGMA_VALIGNED_VAR(A)
-# define LIBXSMM_PRAGMA_VALIGNED
-# define LIBXSMM_PRAGMA_NOVECTOR LIBXSMM_PRAGMA(clang loop vectorize(disable))
-# define LIBXSMM_PRAGMA_FORCEINLINE
-# define LIBXSMM_PRAGMA_LOOP_COUNT(MIN, MAX, AVG) LIBXSMM_PRAGMA(unroll(AVG))
-# define LIBXSMM_PRAGMA_UNROLL_AND_JAM(N) LIBXSMM_PRAGMA(unroll(N))
-# define LIBXSMM_PRAGMA_UNROLL_N(N) LIBXSMM_PRAGMA(unroll(N))
-# define LIBXSMM_PRAGMA_UNROLL LIBXSMM_PRAGMA_UNROLL_N(4)
 #else
-# define LIBXSMM_PRAGMA_NONTEMPORAL_VARS(A, ...)
-# define LIBXSMM_PRAGMA_NONTEMPORAL
-# define LIBXSMM_PRAGMA_VALIGNED_VAR(A)
-# define LIBXSMM_PRAGMA_VALIGNED
-# define LIBXSMM_PRAGMA_NOVECTOR
-# define LIBXSMM_PRAGMA_FORCEINLINE
-# define LIBXSMM_PRAGMA_LOOP_COUNT(MIN, MAX, AVG)
-# define LIBXSMM_PRAGMA_UNROLL_AND_JAM(N)
-# define LIBXSMM_PRAGMA_UNROLL
+# if defined(LIBXSMM_OPENMP_SIMD) && (201811 <= _OPENMP/*v5.0*/)
+#   define LIBXSMM_PRAGMA_NONTEMPORAL(...) LIBXSMM_PRAGMA(omp simd nontemporal(__VA_ARGS__))
+# else
+#   define LIBXSMM_PRAGMA_NONTEMPORAL(...)
+# endif
+# if defined(__clang__)
+#   define LIBXSMM_PRAGMA_VALIGNED_VAR(A)
+#   define LIBXSMM_PRAGMA_VALIGNED
+#   define LIBXSMM_PRAGMA_NOVECTOR LIBXSMM_PRAGMA(clang loop vectorize(disable))
+#   define LIBXSMM_PRAGMA_FORCEINLINE
+#   define LIBXSMM_PRAGMA_LOOP_COUNT(MIN, MAX, AVG) LIBXSMM_PRAGMA(unroll(AVG))
+#   define LIBXSMM_PRAGMA_UNROLL_AND_JAM(N) LIBXSMM_PRAGMA(unroll(N))
+#   define LIBXSMM_PRAGMA_UNROLL_N(N) LIBXSMM_PRAGMA(unroll(N))
+#   define LIBXSMM_PRAGMA_UNROLL LIBXSMM_PRAGMA_UNROLL_N(4)
+# else
+#   define LIBXSMM_PRAGMA_VALIGNED_VAR(A)
+#   define LIBXSMM_PRAGMA_VALIGNED
+#   define LIBXSMM_PRAGMA_NOVECTOR
+#   define LIBXSMM_PRAGMA_FORCEINLINE
+#   define LIBXSMM_PRAGMA_LOOP_COUNT(MIN, MAX, AVG)
+#   define LIBXSMM_PRAGMA_UNROLL_AND_JAM(N)
+#   define LIBXSMM_PRAGMA_UNROLL
+# endif
 #endif
 #if !defined(LIBXSMM_PRAGMA_UNROLL_N)
-# if defined(__GNUC__) && (LIBXSMM_VERSION3(8, 3, 0) <= LIBXSMM_VERSION3(__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__))
+# if defined(__GNUC__) && (LIBXSMM_VERSION2(8, 3) <= LIBXSMM_VERSION2(__GNUC__, __GNUC_MINOR__))
 #   define LIBXSMM_PRAGMA_UNROLL_N(N) LIBXSMM_PRAGMA(GCC unroll N)
 # else
 #   define LIBXSMM_PRAGMA_UNROLL_N(N)
@@ -421,7 +436,7 @@
 # define LIBXSMM_PRAGMA_OPTIMIZE_ON
 #endif
 
-#if defined(_OPENMP) && (200805 <= _OPENMP) /*OpenMP 3.0*/ \
+#if defined(_OPENMP) && (200805 <= _OPENMP/*v3.0*/) \
  && defined(NDEBUG) /* CCE complains for debug builds */
 # define LIBXSMM_OPENMP_COLLAPSE(N) collapse(N)
 #else
@@ -438,8 +453,9 @@
 #define LIBXSMM_UP2POT(N) (LIBXSMM_UP2POT_32((unsigned long long)(N) - LIBXSMM_MIN(1, N)) + LIBXSMM_MIN(1, N))
 #define LIBXSMM_LO2POT(N) (LIBXSMM_UP2POT_32((unsigned long long)(N) >> 1) + LIBXSMM_MIN(1, N))
 
-#define LIBXSMM_UP2(N, NPOT) ((((uintptr_t)N) + ((NPOT) - 1)) & ~((NPOT) - 1))
-#define LIBXSMM_UP(N, UP) ((((N) + (UP) - 1) / (UP)) * (UP))
+#define LIBXSMM_UPDIV(N, MULT) (((N) + ((MULT) - 1)) / (MULT))
+#define LIBXSMM_UP(N, MULT) (LIBXSMM_UPDIV(N, MULT) * (MULT))
+#define LIBXSMM_UP2(N, NPOT) (((N) + ((NPOT) - 1)) & ~((NPOT) - 1))
 #define LIBXSMM_ABS(A) (0 <= (A) ? (A) : -(A))
 #define LIBXSMM_MIN(A, B) ((A) < (B) ? (A) : (B))
 #define LIBXSMM_MAX(A, B) ((A) < (B) ? (B) : (A))
@@ -454,11 +470,12 @@
 #define LIBXSMM_ISNAN(A)  LIBXSMM_NEQ(A, A)
 #define LIBXSMM_NOTNAN(A) LIBXSMM_FEQ(A, A)
 #define LIBXSMM_ROUNDX(TYPE, A) ((TYPE)((long long)(0 <= (A) ? ((double)(A) + 0.5) : ((double)(A) - 0.5))))
+#define LIBXSMM_CONST_VOID_PTR(A) *((const void**)&(A))
 
 /** Makes some functions available independent of C99 support. */
-#if defined(__STDC_VERSION__) && (199901L <= __STDC_VERSION__) /*C99*/
+#if defined(__STDC_VERSION__) && (199901L/*C99*/ <= __STDC_VERSION__)
 # if defined(__PGI)
-#   define LIBXSMM_POWF(A, B) ((float)pow((double)(A), (double)(B)))
+#   define LIBXSMM_POWF(A, B) ((float)pow((float)(A), (float)(B)))
 # else
 #   define LIBXSMM_POWF(A, B) powf(A, B)
 # endif
@@ -474,18 +491,18 @@
 # define LIBXSMM_EXPF(A) expf(A)
 # define LIBXSMM_LOGF(A) logf(A)
 #else
-# define LIBXSMM_POWF(A, B) ((float)pow((double)(A), (double)(B)))
-# define LIBXSMM_FREXPF(A, B) ((float)frexp((double)(A), B))
+# define LIBXSMM_POWF(A, B) ((float)pow((float)(A), (float)(B)))
+# define LIBXSMM_FREXPF(A, B) ((float)frexp((float)(A), B))
 # define LIBXSMM_ROUNDF(A) LIBXSMM_ROUNDX(float, A)
 # define LIBXSMM_ROUND(A) LIBXSMM_ROUNDX(double, A)
-# define LIBXSMM_TANHF(A) ((float)tanh((double)(A)))
-# define LIBXSMM_SQRTF(A) ((float)sqrt((double)(A)))
+# define LIBXSMM_TANHF(A) ((float)tanh((float)(A)))
+# define LIBXSMM_SQRTF(A) ((float)sqrt((float)(A)))
 # define LIBXSMM_EXP2F(A) LIBXSMM_POWF(2, A)
-# define LIBXSMM_LOG2F(A) ((float)LIBXSMM_LOG2((double)(A)))
-# define LIBXSMM_EXP2(A) pow(2.0, (double)(A))
+# define LIBXSMM_LOG2F(A) ((float)LIBXSMM_LOG2((float)(A)))
+# define LIBXSMM_EXP2(A) pow(2.0, A)
 # define LIBXSMM_LOG2(A) (log(A) * (1.0 / (M_LN2)))
-# define LIBXSMM_EXPF(A) ((float)exp((double)(A)))
-# define LIBXSMM_LOGF(A) ((float)log((double)(A)))
+# define LIBXSMM_EXPF(A) ((float)exp((float)(A)))
+# define LIBXSMM_LOGF(A) ((float)log((float)(A)))
 #endif
 
 #if defined(LIBXSMM_INTEL_COMPILER)
@@ -496,7 +513,7 @@
 # endif
 #elif defined(_MSC_VER)
 # define LIBXSMM_ASSUME(EXPRESSION) __assume(EXPRESSION)
-#elif defined(__GNUC__) && !defined(_CRAYC) && (LIBXSMM_VERSION3(4, 5, 0) <= LIBXSMM_VERSION3(__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__))
+#elif defined(__GNUC__) && !defined(_CRAYC) && (LIBXSMM_VERSION2(4, 5) <= LIBXSMM_VERSION2(__GNUC__, __GNUC_MINOR__))
 # define LIBXSMM_ASSUME(EXPRESSION) do { if (!(EXPRESSION)) __builtin_unreachable(); } while(0)
 #else
 # define LIBXSMM_ASSUME(EXPRESSION) assert(EXPRESSION)
@@ -535,9 +552,9 @@
  */
 #if !defined(LIBXSMM_VLA) && !defined(LIBXSMM_NO_VLA) && !defined(__PGI) && ( \
     (defined(__STDC_VERSION__) && (199901L/*C99*/ == __STDC_VERSION__ || (!defined(__STDC_NO_VLA__) && 199901L/*C99*/ < __STDC_VERSION__))) || \
-    (defined(__GNUC__) && LIBXSMM_VERSION2(5, 0) <= LIBXSMM_VERSION2(__GNUC__, __GNUC_MINOR__) && !defined(__STRICT_ANSI__) && !defined(__cplusplus)) /*|| \
+    (defined(__GNUC__) && LIBXSMM_VERSION2(5, 0) <= LIBXSMM_VERSION2(__GNUC__, __GNUC_MINOR__) && !defined(__STRICT_ANSI__) && !defined(__cplusplus)) || \
     (defined(LIBXSMM_INTEL_COMPILER) && !defined(_WIN32) && !defined(__cplusplus)) || \
-    (defined(__INTEL_COMPILER) && !defined(_WIN32))*/)
+    (defined(__INTEL_COMPILER) && !defined(_WIN32)))
 # define LIBXSMM_VLA
 #endif
 
@@ -614,12 +631,15 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 
 #if defined(_OPENMP)
 # define LIBXSMM_PRAGMA_OMP(...) LIBXSMM_PRAGMA(omp __VA_ARGS__)
+# if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
+#   define LIBXSMM_OMP_VAR(A) LIBXSMM_UNUSED(A) /* suppress warning about "unused" variable */
+# elif defined(__clang__)
+#   define LIBXSMM_OMP_VAR(A) (A) = 0
+# else
+# define LIBXSMM_OMP_VAR(A)
+# endif
 #else
 # define LIBXSMM_PRAGMA_OMP(...)
-#endif
-#if defined(_OPENMP) && defined(_MSC_VER) && !defined(LIBXSMM_INTEL_COMPILER)
-# define LIBXSMM_OMP_VAR(A) LIBXSMM_UNUSED(A) /* suppress warning about "unused" variable */
-#else
 # define LIBXSMM_OMP_VAR(A)
 #endif
 
@@ -659,39 +679,6 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 # define LIBXSMM_MKTEMP_PATTERN "XXXXXX"
 #endif
 
-#if defined(_WIN32) && 0
-# define LIBXSMM_SNPRINTF(S, N, ...) _snprintf_s(S, N, _TRUNCATE, __VA_ARGS__)
-#elif defined(__STDC_VERSION__) && (199901L <= __STDC_VERSION__ || defined(__GNUC__))
-# define LIBXSMM_SNPRINTF(S, N, ...) snprintf(S, N, __VA_ARGS__)
-#else
-# define LIBXSMM_SNPRINTF(S, N, ...) sprintf((S) + /*unused*/(N) * 0, __VA_ARGS__)
-#endif
-#if defined(_WIN32)
-# define LIBXSMM_PUTENV _putenv
-# define LIBXSMM_SETENV(NAME, VALUE, OVERWRITE) \
-    if (NULL == getenv(NAME) || (OVERWRITE)) LIBXSMM_PUTENV(NAME "=" VALUE)
-#else
-# define LIBXSMM_PUTENV putenv
-# define LIBXSMM_SETENV setenv
-#endif
-#if (0 == LIBXSMM_SYNC)
-# define LIBXSMM_FLOCK(FILE)
-# define LIBXSMM_FUNLOCK(FILE)
-#elif defined(_WIN32)
-# define LIBXSMM_FLOCK(FILE) _lock_file(FILE)
-# define LIBXSMM_FUNLOCK(FILE) _unlock_file(FILE)
-#elif !defined(__CYGWIN__)
-# define LIBXSMM_FLOCK(FILE) flockfile(FILE)
-# define LIBXSMM_FUNLOCK(FILE) funlockfile(FILE)
-#else /* Only available with __CYGWIN__ *and* C++0x. */
-# define LIBXSMM_FLOCK(FILE)
-# define LIBXSMM_FUNLOCK(FILE)
-#endif
-
-/** Synchronize console output */
-#define LIBXSMM_STDIO_ACQUIRE() LIBXSMM_FLOCK(stdout); LIBXSMM_FLOCK(stderr)
-#define LIBXSMM_STDIO_RELEASE() LIBXSMM_FUNLOCK(stderr); LIBXSMM_FUNLOCK(stdout)
-
 /** Below group is to fix-up some platform/compiler specifics. */
 #if defined(_WIN32)
 # if !defined(_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES)
@@ -721,7 +708,7 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 #   endif
 # endif
 #endif
-#if !defined(_GNU_SOURCE) /*&& defined(__GNUC__)*/
+#if !defined(_GNU_SOURCE) && defined(LIBXSMM_BUILD)
 # define _GNU_SOURCE
 #endif
 #if !defined(__STDC_FORMAT_MACROS)
@@ -756,6 +743,14 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 #if defined(LIBXSMM_OFFLOAD_TARGET)
 # pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
 #endif
+
+#if (0 != LIBXSMM_SYNC)
+# if defined(_WIN32) || defined(__CYGWIN__)
+#   include <windows.h>
+# else
+#   include <pthread.h>
+# endif
+#endif
 #if !defined(LIBXSMM_ASSERT)
 # include <assert.h>
 # if defined(NDEBUG)
@@ -769,7 +764,7 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 #endif
 #if !defined(LIBXSMM_EXPECT_ELIDE)
 # define LIBXSMM_EXPECT_ELIDE(RESULT, EXPR) do { \
-    /*const*/ int libxsmm_expect_result_ = (EXPR); \
+    /*const*/ int libxsmm_expect_result_ = ((RESULT) == (EXPR)); \
     LIBXSMM_UNUSED(libxsmm_expect_result_); \
   } while(0)
 #endif
@@ -785,10 +780,59 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 #else
 # define LIBXSMM_EXPECT_DEBUG LIBXSMM_EXPECT_ELIDE
 #endif
-#include <stddef.h>
+#if defined(_OPENMP) && defined(LIBXSMM_SYNC_OMP)
+# include <omp.h>
+#endif
+#include <inttypes.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include <float.h>
+#include <stdio.h>
+
 #if defined(LIBXSMM_OFFLOAD_TARGET)
 # pragma offload_attribute(pop)
+#endif
+
+#if !defined(FLT_MAX)
+# if !defined(__FLT_MAX__)
+#   define FLT_MAX 3.40282346638528859811704183484516925e+38F
+# else
+#   define FLT_MAX __FLT_MAX__
+# endif
+#endif
+#if !defined(FLT_MIN)
+# if !defined(__FLT_MIN__)
+#   define FLT_MIN 1.17549435082228750796873653722224568e-38F
+# else
+#   define FLT_MIN __FLT_MIN__
+# endif
+#endif
+#if defined(_WIN32) && 0
+# define LIBXSMM_SNPRINTF(S, N, ...) _snprintf_s(S, N, _TRUNCATE, __VA_ARGS__)
+#elif defined(__STDC_VERSION__) && (199901L <= __STDC_VERSION__ || defined(__GNUC__))
+# define LIBXSMM_SNPRINTF(S, N, ...) snprintf(S, N, __VA_ARGS__)
+#else
+# define LIBXSMM_SNPRINTF(S, N, ...) sprintf((S) + /*unused*/(N) * 0, __VA_ARGS__)
+#endif
+#if defined(__THROW) && defined(__cplusplus)
+# define LIBXSMM_THROW __THROW
+#endif
+#if !defined(LIBXSMM_THROW)
+# define LIBXSMM_THROW
+#endif
+#if defined(__GNUC__) && LIBXSMM_VERSION2(4, 2) == LIBXSMM_VERSION2(__GNUC__, __GNUC_MINOR__) && \
+  !defined(__clang__) && !defined(__PGI) && !defined(__INTEL_COMPILER) && !defined(_CRAYC)
+# define LIBXSMM_NOTHROW LIBXSMM_THROW
+#else
+# define LIBXSMM_NOTHROW
+#endif
+#if defined(_WIN32)
+# define LIBXSMM_PUTENV(A) _putenv(A)
+#else
+# define LIBXSMM_PUTENV(A) putenv(A)
 #endif
 
 /* block must be after including above header files */
@@ -799,7 +843,7 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 #   define _Float128 __float128
 # endif
 # if !defined(LIBXSMM_GLIBC_FPTYPES) && defined(__GNUC__) && !defined(__cplusplus) && defined(__linux__) \
-  && (LIBXSMM_VERSION3(7, 0, 0) > LIBXSMM_VERSION3(__GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__) || \
+  && (LIBXSMM_VERSION2(7, 0) > LIBXSMM_VERSION2(__GNUC__, __GNUC_MINOR__) || \
      (defined(LIBXSMM_INTEL_COMPILER) && (1802 >= LIBXSMM_INTEL_COMPILER)))
 #   define LIBXSMM_GLIBC_FPTYPES
 # endif
@@ -832,15 +876,18 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 #   if !defined(_BSD_SOURCE)
 #     define _BSD_SOURCE
 #   endif
-# elif !defined(__PURE_INTEL_C99_HEADERS__)
-#   define __PURE_INTEL_C99_HEADERS__
+# else
+#   if !defined(__PURE_INTEL_C99_HEADERS__)
+#     define __PURE_INTEL_C99_HEADERS__
+#   endif
 # endif
 #endif
-#if !defined(LIBXSMM_NO_LIBM) && (!defined(__STDC_VERSION__) || (199901L > __STDC_VERSION__) || defined(__cplusplus))
-# include <math.h>
-# if !defined(M_LN2)
-#   define M_LN2 0.69314718055994530942
+#if !defined(LIBXSMM_NO_LIBM)
+# if (defined(LIBXSMM_INTEL_COMPILER) && (1800 <= LIBXSMM_INTEL_COMPILER)) \
+  && !defined(_WIN32) /* error including dfp754.h */
+#   include <mathimf.h>
 # endif
+# include <math.h>
 #endif
 #if defined(LIBXSMM_OFFLOAD_TARGET)
 # pragma offload_attribute(pop)

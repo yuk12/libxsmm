@@ -9,14 +9,11 @@
 /* Alexander Heinecke (Intel Corp.)
 ******************************************************************************/
 #include "libxsmm_dnn_fusedbatchnorm_forward.h"
-#include <libxsmm_intrinsics_x86.h>
 #include "libxsmm_main.h"
-#include <libxsmm.h>
 
 #if defined(LIBXSMM_OFFLOAD_TARGET)
 # pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
 #endif
-#include <string.h>
 #include <math.h>
 #if defined(LIBXSMM_OFFLOAD_TARGET)
 # pragma offload_attribute(pop)
@@ -289,7 +286,6 @@ libxsmm_dnn_err_t libxsmm_dnn_fusedbatchnorm_st_fwd_custom_bf16_bf16_c32(libxsmm
   return status;
 }
 
-
 LIBXSMM_API_INTERN LIBXSMM_INTRINSICS(LIBXSMM_X86_AVX512)
 libxsmm_dnn_err_t libxsmm_dnn_fusedbatchnorm_st_fwd_custom_bf16_bf16_c64(libxsmm_dnn_fusedbatchnorm* handle, int start_thread, int tid)
 {
@@ -341,7 +337,6 @@ libxsmm_dnn_err_t libxsmm_dnn_fusedbatchnorm_st_fwd_custom_bf16_bf16_c64(libxsmm
 #endif
   return status;
 }
-
 
 LIBXSMM_API_INTERN libxsmm_dnn_err_t libxsmm_dnn_fusedbatchnorm_st_fwd_custom(libxsmm_dnn_fusedbatchnorm* handle, int start_thread, int tid)
 {

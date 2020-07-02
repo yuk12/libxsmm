@@ -7,8 +7,11 @@ malloc
 matcopy
 matdiff
 math
+memory
 mhd
-otrans
+registry
 rng
 threadsafety
+timer
+trans
 vla

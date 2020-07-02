@@ -52,6 +52,7 @@
     <ClInclude Include="..\include\libxsmm_sync.h" />
     <ClInclude Include="..\include\libxsmm_timer.h" />
     <ClInclude Include="..\include\libxsmm_typedefs.h" />
+    <ClInclude Include="..\src\generator_mateltwise_avx_avx512.h" />
     <ClInclude Include="..\src\generator_packed_aux.h" />
     <ClInclude Include="..\src\generator_packed_gemmnn.h" />
     <ClInclude Include="..\src\generator_packed_gemm_ac_rm_avx_avx2_avx512.h" />
@@ -61,6 +62,7 @@
     <ClInclude Include="..\src\generator_packed_trmm_avx_avx512.h" />
     <ClInclude Include="..\src\generator_packed_trsm_dmacros.h" />
     <ClInclude Include="..\src\generator_packed_xct_avx2_lln.h" />
+    <ClInclude Include="..\src\generator_spgemm_csc_csparse_soa.h" />
     <ClInclude Include="..\src\libxsmm_blocked_gemm_types.h" />
     <ClInclude Include="..\src\libxsmm_diff.h" />
     <ClInclude Include="..\src\libxsmm_dnn_elementwise.h" />
@@ -88,17 +90,19 @@
     <ClInclude Include="..\src\libxsmm_dnn_convolution_backward.h" />
     <ClInclude Include="..\src\libxsmm_dnn_convolution_forward.h" />
     <ClInclude Include="..\src\libxsmm_dnn_convolution_weight_update.h" />
-    <ClInclude Include="..\src\libxsmm_dnn_fullyconnected_backward.h" />
+    <ClInclude Include="..\src\libxsmm_dnn_fullyconnected_backward_weight_update.h" />
     <ClInclude Include="..\src\libxsmm_dnn_fullyconnected_forward.h" />
-    <ClInclude Include="..\src\libxsmm_dnn_fullyconnected_weight_update.h" />
     <ClInclude Include="..\src\libxsmm_dnn_fusedbatchnorm_backward.h" />
     <ClInclude Include="..\src\libxsmm_dnn_fusedbatchnorm_forward.h" />
     <ClInclude Include="..\src\libxsmm_dnn_fusedgroupnorm_backward.h" />
     <ClInclude Include="..\src\libxsmm_dnn_fusedgroupnorm_forward.h" />
+    <ClInclude Include="..\src\libxsmm_dnn_optimizer_sgd.h" />
     <ClInclude Include="..\src\libxsmm_dnn_pooling_backward.h" />
     <ClInclude Include="..\src\libxsmm_dnn_pooling_forward.h" />
     <ClInclude Include="..\src\libxsmm_dnn_rnncell_backward_weight_update.h" />
     <ClInclude Include="..\src\libxsmm_dnn_rnncell_forward.h" />
+    <ClInclude Include="..\src\libxsmm_dnn_softmaxloss_backward.h" />
+    <ClInclude Include="..\src\libxsmm_dnn_softmaxloss_forward.h" />
     <ClInclude Include="..\src\libxsmm_hash.h" />
     <ClInclude Include="..\src\libxsmm_gemm.h" />
     <ClInclude Include="..\src\libxsmm_main.h" />
@@ -112,9 +116,12 @@
     <ClInclude Include="..\src\perf_jitdump.h" />
     <ClInclude Include="..\src\template\libxsmm.h" />
     <ClInclude Include="..\src\template\libxsmm_config.h" />
+    <ClInclude Include="..\src\template\libxsmm_version.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\generator_common.c" />
+    <ClCompile Include="..\src\generator_mateltwise.c" />
+    <ClCompile Include="..\src\generator_mateltwise_avx_avx512.c" />
     <ClCompile Include="..\src\generator_packed.c" />
     <ClCompile Include="..\src\generator_packed_gemm_ac_rm_avx_avx2_avx512.c" />
     <ClCompile Include="..\src\generator_packed_gemm_avx_avx512.c" />
@@ -136,6 +143,7 @@
     <ClCompile Include="..\src\generator_spgemm_csc_asparse.c" />
     <ClCompile Include="..\src\generator_spgemm_csc_bsparse.c" />
     <ClCompile Include="..\src\generator_spgemm_csc_bsparse_soa.c" />
+    <ClCompile Include="..\src\generator_spgemm_csc_csparse_soa.c" />
     <ClCompile Include="..\src\generator_spgemm_csc_reader.c" />
     <ClCompile Include="..\src\generator_spgemm_csr_asparse.c" />
     <ClCompile Include="..\src\generator_spgemm_csr_asparse_reg.c" />
@@ -154,21 +162,25 @@
     <ClCompile Include="..\src\libxsmm_dnn_convolution_weight_update.c" />
     <ClCompile Include="..\src\libxsmm_dnn_elementwise.c" />
     <ClCompile Include="..\src\libxsmm_dnn_fullyconnected.c" />
-    <ClCompile Include="..\src\libxsmm_dnn_fullyconnected_backward.c" />
+    <ClCompile Include="..\src\libxsmm_dnn_fullyconnected_backward_weight_update.c" />
     <ClCompile Include="..\src\libxsmm_dnn_fullyconnected_forward.c" />
-    <ClCompile Include="..\src\libxsmm_dnn_fullyconnected_weight_update.c" />
     <ClCompile Include="..\src\libxsmm_dnn_fusedbatchnorm.c" />
     <ClCompile Include="..\src\libxsmm_dnn_fusedbatchnorm_backward.c" />
     <ClCompile Include="..\src\libxsmm_dnn_fusedbatchnorm_forward.c" />
     <ClCompile Include="..\src\libxsmm_dnn_fusedgroupnorm.c" />
     <ClCompile Include="..\src\libxsmm_dnn_fusedgroupnorm_backward.c" />
     <ClCompile Include="..\src\libxsmm_dnn_fusedgroupnorm_forward.c" />
+    <ClCompile Include="..\src\libxsmm_dnn_optimizer.c" />
+    <ClCompile Include="..\src\libxsmm_dnn_optimizer_sgd.c" />
     <ClCompile Include="..\src\libxsmm_dnn_pooling.c" />
     <ClCompile Include="..\src\libxsmm_dnn_pooling_backward.c" />
     <ClCompile Include="..\src\libxsmm_dnn_pooling_forward.c" />
     <ClCompile Include="..\src\libxsmm_dnn_rnncell.c" />
     <ClCompile Include="..\src\libxsmm_dnn_rnncell_backward_weight_update.c" />
     <ClCompile Include="..\src\libxsmm_dnn_rnncell_forward.c" />
+    <ClCompile Include="..\src\libxsmm_dnn_softmaxloss.c" />
+    <ClCompile Include="..\src\libxsmm_dnn_softmaxloss_backward.c" />
+    <ClCompile Include="..\src\libxsmm_dnn_softmaxloss_forward.c" />
     <ClCompile Include="..\src\libxsmm_dnn_tensor.c" />
     <ClCompile Include="..\src\libxsmm_fsspmdm.c" />
     <ClCompile Include="..\src\libxsmm_generator.c" />
@@ -299,6 +311,22 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_convolve_st_fwd_custom_custom_generic_i8i32.tpl.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_convolve_st_fwd_custom_custom_generic_i8i8.tpl.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\src\template\libxsmm_dnn_convolve_st_fwd_nhwc_custom-rsck_generic.tpl.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
@@ -331,7 +359,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwd_custom_generic.tpl.c">
+    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwdupd_custom_generic.tpl.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
@@ -339,7 +367,15 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwd_ncnc_kcck_generic.tpl.c">
+    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwdupd_ncnc_kcck_generic.tpl.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_bwdupd_ncnc_kcck_generic_bf16.tpl.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
@@ -364,22 +400,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_fwd_ncnc_kcck_generic_bf16.tpl.c">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_upd_custom_generic.tpl.c">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
-    </ClCompile>
-    <ClCompile Include="..\src\template\libxsmm_dnn_fullyconnected_st_upd_ncnc_kcck_generic.tpl.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
@@ -508,6 +528,14 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\src\template\libxsmm_dnn_fusedgroupnorm_st_fwd_custom_generic.tpl.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_optimizer_sgd_st_generic.tpl.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
@@ -763,6 +791,22 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_softmaxloss_st_bwd_ncnc_generic.tpl.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="..\src\template\libxsmm_dnn_softmaxloss_st_fwd_ncnc_generic.tpl.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="..\src\template\libxsmm_dnn_tensor_bias_copy_in_nchw.tpl.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">true</ExcludedFromBuild>
@@ -990,7 +1034,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <InterproceduralOptimization>true</InterproceduralOptimization>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
     <ProfileGuidedOptimization>Disabled</ProfileGuidedOptimization>
     <CodeCoverageOperations>Disabled</CodeCoverageOperations>
     <PlatformToolset>v142</PlatformToolset>
@@ -1015,7 +1058,6 @@
     <VCToolsVersion />
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='symbols|x64'" Label="Configuration">
-    <WholeProgramOptimization>true</WholeProgramOptimization>
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <InterproceduralOptimization>true</InterproceduralOptimization>
     <ProfileGuidedOptimization>Disabled</ProfileGuidedOptimization>
@@ -1050,48 +1092,54 @@
     <OutDir Condition="'$(Configuration)|$(Platform)'=='release|Win32'">$(SolutionDir)..\lib\ia32\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">$(SolutionDir)..\lib\ia32\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">$(SolutionDir)..\lib\ia32\</OutDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='release|Win32'">$(SolutionDir)..\build\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">$(SolutionDir)..\build\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">$(SolutionDir)..\build\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='release|Win32'">$(SolutionDir)..\obj\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">$(SolutionDir)..\obj\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">$(SolutionDir)..\obj\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='release|x64'">$(SolutionDir)..\lib\intel64\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">$(SolutionDir)..\lib\intel64\</OutDir>
     <OutDir Condition="'$(Configuration)|$(Platform)'=='debug|x64'">$(SolutionDir)..\lib\intel64\</OutDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='release|x64'">$(SolutionDir)..\build\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">$(SolutionDir)..\build\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='debug|x64'">$(SolutionDir)..\build\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='release|x64'">$(SolutionDir)..\obj\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">$(SolutionDir)..\obj\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='debug|x64'">$(SolutionDir)..\obj\$(Platform)-$(Configuration)\$(ProjectName)\</IntDir>
     <TargetName Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">$(ProjectName)-$(Configuration)</TargetName>
     <TargetName Condition="'$(Configuration)|$(Platform)'=='debug|x64'">$(ProjectName)-$(Configuration)</TargetName>
-    <ProfileDirectory Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">build\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
-    <ProfileDirectory Condition="'$(Configuration)|$(Platform)'=='release|Win32'">build\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
-    <ProfileDirectory Condition="'$(Configuration)|$(Platform)'=='debug|x64'">build\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
-    <ProfileDirectory Condition="'$(Configuration)|$(Platform)'=='release|x64'">build\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
+    <ProfileDirectory Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">obj\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
+    <ProfileDirectory Condition="'$(Configuration)|$(Platform)'=='release|Win32'">obj\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
+    <ProfileDirectory Condition="'$(Configuration)|$(Platform)'=='debug|x64'">obj\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
+    <ProfileDirectory Condition="'$(Configuration)|$(Platform)'=='release|x64'">obj\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">
     <TargetName>$(ProjectName)-$(Configuration)</TargetName>
-    <ProfileDirectory>build\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
-    <CustomBuildBeforeTargets>BuildGenerateSources</CustomBuildBeforeTargets>
+    <ProfileDirectory>obj\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">
     <TargetName>$(ProjectName)-$(Configuration)</TargetName>
-    <ProfileDirectory>build\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
-    <CustomBuildBeforeTargets>BuildGenerateSources</CustomBuildBeforeTargets>
+    <ProfileDirectory>obj\$(Platform)-$(Configuration)\$(ProjectName)\</ProfileDirectory>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='release|Win32'">
-    <CustomBuildBeforeTargets>BuildGenerateSources</CustomBuildBeforeTargets>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='release|x64'">
-    <CustomBuildBeforeTargets>BuildGenerateSources</CustomBuildBeforeTargets>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">
-    <CustomBuildBeforeTargets>BuildGenerateSources</CustomBuildBeforeTargets>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='debug|x64'">
-    <CustomBuildBeforeTargets>BuildGenerateSources</CustomBuildBeforeTargets>
+    <CustomBuildBeforeTargets>
+    </CustomBuildBeforeTargets>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='release|Win32'">
     <ClCompile>
       <Optimization>Full</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\build;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\build;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\obj;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\obj;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>__SUPPRESS_FOR_PRODUCT;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_DEPRECATE;_USE_MATH_DEFINES;WIN32_LEAN_AND_MEAN;NOMINMAX;LIBXSMM_BUILD;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -1123,23 +1171,15 @@
     </Link>
     <ProjectReference />
     <ProjectReference />
-    <Lib>
-      <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>dbghelp.lib</AdditionalDependencies>
-    </Lib>
+    <Lib />
     <BuildLog />
-    <CustomBuildStep>
-      <Command>xcopy /D /Y ..\src\template\libxsmm*.h ..\include</Command>
-    </CustomBuildStep>
-    <CustomBuildStep>
-      <Outputs>..\include\libxsmm.h;..\include\libxsmm_config.h</Outputs>
-      <Message>Configuring LIBXSMM...</Message>
-    </CustomBuildStep>
+    <CustomBuildStep />
+    <CustomBuildStep />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='symbols|Win32'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\build;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\build;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\obj;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\obj;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>__SUPPRESS_FOR_PRODUCT;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_DEPRECATE;_USE_MATH_DEFINES;WIN32_LEAN_AND_MEAN;NOMINMAX;LIBXSMM_BUILD;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -1173,18 +1213,10 @@
     </Link>
     <ProjectReference />
     <ProjectReference />
-    <Lib>
-      <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>dbghelp.lib</AdditionalDependencies>
-    </Lib>
+    <Lib />
     <BuildLog />
-    <CustomBuildStep>
-      <Command>xcopy /D /Y ..\src\template\libxsmm*.h ..\include</Command>
-    </CustomBuildStep>
-    <CustomBuildStep>
-      <Outputs>..\include\libxsmm.h;..\include\libxsmm_config.h</Outputs>
-      <Message>Configuring LIBXSMM...</Message>
-    </CustomBuildStep>
+    <CustomBuildStep />
+    <CustomBuildStep />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='release|x64'">
     <Midl>
@@ -1192,7 +1224,7 @@
     </Midl>
     <ClCompile>
       <Optimization>Full</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\build;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\build;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\obj;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\obj;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>__SUPPRESS_FOR_PRODUCT;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_DEPRECATE;_USE_MATH_DEFINES;WIN32_LEAN_AND_MEAN;NOMINMAX;LIBXSMM_BUILD;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -1223,18 +1255,10 @@
     </Link>
     <ProjectReference />
     <ProjectReference />
-    <Lib>
-      <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>dbghelp.lib</AdditionalDependencies>
-    </Lib>
+    <Lib />
     <BuildLog />
-    <CustomBuildStep>
-      <Command>xcopy /D /Y ..\src\template\libxsmm*.h ..\include</Command>
-    </CustomBuildStep>
-    <CustomBuildStep>
-      <Outputs>..\include\libxsmm.h;..\include\libxsmm_config.h</Outputs>
-      <Message>Configuring LIBXSMM...</Message>
-    </CustomBuildStep>
+    <CustomBuildStep />
+    <CustomBuildStep />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='symbols|x64'">
     <Midl>
@@ -1242,7 +1266,7 @@
     </Midl>
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\build;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\build;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\obj;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\obj;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>__SUPPRESS_FOR_PRODUCT;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_DEPRECATE;_USE_MATH_DEFINES;WIN32_LEAN_AND_MEAN;NOMINMAX;LIBXSMM_BUILD;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
@@ -1275,27 +1299,19 @@
     </Link>
     <ProjectReference />
     <ProjectReference />
-    <Lib>
-      <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>dbghelp.lib</AdditionalDependencies>
-    </Lib>
+    <Lib />
     <BuildLog />
-    <CustomBuildStep>
-      <Command>xcopy /D /Y ..\src\template\libxsmm*.h ..\include</Command>
-    </CustomBuildStep>
-    <CustomBuildStep>
-      <Outputs>..\include\libxsmm.h;..\include\libxsmm_config.h</Outputs>
-      <Message>Configuring LIBXSMM...</Message>
-    </CustomBuildStep>
+    <CustomBuildStep />
+    <CustomBuildStep />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\build;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\build;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\obj;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\obj;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>__SUPPRESS_FOR_PRODUCT;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_DEPRECATE;_USE_MATH_DEFINES;WIN32_LEAN_AND_MEAN;NOMINMAX;LIBXSMM_BUILD;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
-      <DisableSpecificWarnings>4710;4711;4752;4820</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4710;4711;4752;4820;6011</DisableSpecificWarnings>
       <OffloadConstructs>None</OffloadConstructs>
       <DisableSpecificDiagnostics>177,3948,10373,10382</DisableSpecificDiagnostics>
       <UseProcessorExtensions>SSE42</UseProcessorExtensions>
@@ -1318,18 +1334,10 @@
     </Link>
     <ProjectReference />
     <ProjectReference />
-    <Lib>
-      <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>dbghelp.lib</AdditionalDependencies>
-    </Lib>
+    <Lib />
     <BuildLog />
-    <CustomBuildStep>
-      <Command>xcopy /D /Y ..\src\template\libxsmm*.h ..\include</Command>
-    </CustomBuildStep>
-    <CustomBuildStep>
-      <Outputs>..\include\libxsmm.h;..\include\libxsmm_config.h</Outputs>
-      <Message>Configuring LIBXSMM...</Message>
-    </CustomBuildStep>
+    <CustomBuildStep />
+    <CustomBuildStep />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='debug|x64'">
     <Midl>
@@ -1337,11 +1345,11 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\build;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\build;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\include;$(SolutionDir)..\obj;$(LIBXSMMROOT)\include;$(LIBXSMMROOT)\obj;$(LIBXSMMROOT)\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>__SUPPRESS_FOR_PRODUCT;_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES;_CRT_SECURE_NO_DEPRECATE;_SCL_SECURE_NO_DEPRECATE;_USE_MATH_DEFINES;WIN32_LEAN_AND_MEAN;NOMINMAX;LIBXSMM_BUILD;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
-      <DisableSpecificWarnings>4710;4711;4752;4820</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4710;4711;4752;4820;6011</DisableSpecificWarnings>
       <OffloadConstructs>None</OffloadConstructs>
       <DisableSpecificDiagnostics>177,3948,10373,10382</DisableSpecificDiagnostics>
       <UseProcessorExtensions>SSE42</UseProcessorExtensions>
@@ -1363,18 +1371,10 @@
     </Link>
     <ProjectReference />
     <ProjectReference />
-    <Lib>
-      <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>dbghelp.lib</AdditionalDependencies>
-    </Lib>
+    <Lib />
     <BuildLog />
-    <CustomBuildStep>
-      <Command>xcopy /D /Y ..\src\template\libxsmm*.h ..\include</Command>
-    </CustomBuildStep>
-    <CustomBuildStep>
-      <Outputs>..\include\libxsmm.h;..\include\libxsmm_config.h</Outputs>
-      <Message>Configuring LIBXSMM...</Message>
-    </CustomBuildStep>
+    <CustomBuildStep />
+    <CustomBuildStep />
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
