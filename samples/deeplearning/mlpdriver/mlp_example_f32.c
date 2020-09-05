@@ -32,6 +32,8 @@ int main(int argc, char* argv[])
   unsigned char **relumask_libxsmm;
   void* scratch = NULL;
   size_t scratch_size = 0;
+  libxsmm_matdiff_info norms;
+  libxsmm_matdiff_clear(&norms);
 
   /* some parameters we can overwrite via cli,
      default is some inner layer of overfeat */
@@ -178,17 +180,17 @@ int main(int argc, char* argv[])
   for ( i = 0 ; i < num_layers+2; ++i ) {
     init_buf( act_libxsmm[i], MB*C[i], 0, 0 );
   }
-  for ( i = 0 ; i < num_layers+1; ++i ) {
-    init_buf( delact_libxsmm[i], MB*C[i], 0, 0 );
-  }
   for ( i = 0 ; i < num_layers; ++i ) {
     init_buf( fil_libxsmm[i], C[i]*C[i+1], 0, 0 );
   }
   for ( i = 0 ; i < num_layers; ++i ) {
-    init_buf( delfil_libxsmm[i], C[i]*C[i+1], 0, 0 );
+    init_buf( bias_libxsmm[i], C[i+1], 0, 0 );
+  }
+  for ( i = 0 ; i < num_layers+1; ++i ) {
+    init_buf( delact_libxsmm[i], MB*C[i], 0, 0 );
   }
   for ( i = 0 ; i < num_layers; ++i ) {
-    init_buf( bias_libxsmm[i], C[i+1], 0, 0 );
+    init_buf( delfil_libxsmm[i], C[i]*C[i+1], 0, 0 );
   }
   for ( i = 0 ; i < num_layers; ++i ) {
     init_buf( delbias_libxsmm[i], C[i+1], 0, 0 );
@@ -445,6 +447,8 @@ int main(int argc, char* argv[])
       printf("%i,", C[i] );
     }
     printf("%f,%f\n", ((double)(l_total/iters)), gflop/l_total);
+    libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, fil_libxsmm[0], fil_libxsmm[0], 0, 0);
+    printf("\nL1 of layer's 0 weights after training : %.25g\n\n", norms.l1_ref);
   }
 
   if (type == 'A') {
@@ -491,6 +495,8 @@ int main(int argc, char* argv[])
       printf("%i,", C[i] );
     }
     printf("%f,%f\n", ((double)(l_total/iters)), gflop/l_total);
+    libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, fil_libxsmm[0], fil_libxsmm[0], 0, 0);
+    printf("\nL1 of layer's 0 weights after training : %.25g\n\n", norms.l1_ref);
   }
 
   for ( i = 0; i < num_layers; ++i ) {
@@ -569,9 +575,6 @@ int main(int argc, char* argv[])
   free( relumask_libxsmm );
 
   free( C );
-
-  /* some empty lines at the end */
-  printf("\n\n\n");
 
   return global_status;
 }

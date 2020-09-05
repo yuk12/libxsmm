@@ -6,7 +6,7 @@
 * Further information: https://github.com/hfp/libxsmm/                        *
 * SPDX-License-Identifier: BSD-3-Clause                                       *
 ******************************************************************************/
-/* Alexander Heinecke (Intel Corp.)
+/* Evangelos Georganas, Alexander Heinecke (Intel Corp.)
 ******************************************************************************/
 #include <libxsmm.h>
 #include <mpi.h>
@@ -27,11 +27,11 @@
 
 int main(int argc, char* argv[])
 {
-  // Initialize the MPI environment
+  /* Initialize the MPI environment */
   MPI_Init(&argc, &argv);
-  
-  float **act_libxsmm, **ref_act_libxsmm, **fil_libxsmm, **ref_fil_libxsmm, **delact_libxsmm, **delfil_libxsmm;
-  float **bias_libxsmm, **ref_bias_libxsmm, **delbias_libxsmm;
+
+  float **act_libxsmm, **ref_act_libxsmm, **fil_libxsmm, **delact_libxsmm, **delfil_libxsmm;
+  float **bias_libxsmm, **delbias_libxsmm;
   unsigned char **relumask_libxsmm;
   void* scratch = NULL;
   size_t scratch_size = 0;
@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
 
   /* some parameters we can overwrite via cli,
      default is some inner layer of overfeat */
-  int nodes = 4;
+  int n_procs = 4;
   int iters = 10;       /* repetitions of benchmark */
   int MB = 32;          /* mini-batch size, "N" */
   int global_MB = 32;
@@ -95,7 +95,7 @@ int main(int argc, char* argv[])
   /* reading new values from cli */
   i = 1;
   num_layers = argc - 10;
-  if (argc > i) nodes      = atoi(argv[i++]);
+  if (argc > i) n_procs      = atoi(argv[i++]);
   if (argc > i) iters      = atoi(argv[i++]);
   if (argc > i) global_MB  = atoi(argv[i++]);
   if (argc > i) fuse_type  = atoi(argv[i++]);
@@ -104,7 +104,7 @@ int main(int argc, char* argv[])
   if (argc > i) bk         = atoi(argv[i++]);
   if (argc > i) bc         = atoi(argv[i++]);
 
-  MB = global_MB / nodes;
+  MB = global_MB / n_procs;
 
   /* Get the rank of the process */
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -166,6 +166,7 @@ int main(int argc, char* argv[])
   /* allocate data */
   /* +2 because of the softwax layer */
   act_libxsmm    = (float**)malloc( (num_layers+2)*sizeof(float*) );
+  ref_act_libxsmm = (float**)malloc( (num_layers+2)*sizeof(float*) );
   delact_libxsmm = (float**)malloc( (num_layers+1)*sizeof(float*) );
   for ( i = 0 ; i < num_layers+2; ++i ) {
     act_libxsmm[i]                = (float*)libxsmm_aligned_malloc( MB*C[i]*sizeof(float), 2097152);
@@ -191,79 +192,37 @@ int main(int argc, char* argv[])
     relumask_libxsmm[i]           = (unsigned char*)libxsmm_aligned_malloc( MB*C[i+1]*sizeof(unsigned char), 2097152);
   }
 
-  /* Serial initialization of some reference data */
+  /* Serial initialization of data on proc 0 */
   if (rank == 0) {
-    ref_act_libxsmm    = (float**)malloc( (num_layers+2)*sizeof(float*) );
     for ( i = 0 ; i < num_layers+2; ++i ) {
       ref_act_libxsmm[i]                = (float*)libxsmm_aligned_malloc( global_MB*C[i]*sizeof(float), 2097152);
     }
-    ref_fil_libxsmm    = (float**)malloc( num_layers*sizeof(float*) );
-    for ( i = 0 ; i < num_layers; ++i ) {
-      ref_fil_libxsmm[i]                = (float*)libxsmm_aligned_malloc( C[i]*C[i+1]*sizeof(float), 2097152);
-    }
-    ref_bias_libxsmm    = (float**)malloc( num_layers*sizeof(float*) );
-    for ( i = 0 ; i < num_layers; ++i ) {
-      ref_bias_libxsmm[i]               = (float*)libxsmm_aligned_malloc( C[i+1]*sizeof(float), 2097152);
-    }
-
     /* init data */
     for ( i = 0 ; i < num_layers+2; ++i ) {
       init_buf( ref_act_libxsmm[i], global_MB*C[i], 0, 0 );
     }
     for ( i = 0 ; i < num_layers; ++i ) {
-      init_buf( ref_fil_libxsmm[i], C[i]*C[i+1], 0, 0 );
+      init_buf( fil_libxsmm[i], C[i]*C[i+1], 0, 0 );
     }
     for ( i = 0 ; i < num_layers; ++i ) {
-      init_buf( ref_bias_libxsmm[i], C[i+1], 0, 0 );
-    }
-
-    /* Send the activations to each node */
-    for (j = 1; j < nodes; j++) {
-      for ( i = 0 ; i < num_layers+2; ++i ) {
-        MPI_Send((float*)ref_act_libxsmm[i] + j * MB * C[i], MB * C[i], MPI_FLOAT, j, 0, MPI_COMM_WORLD);
-      }
-    }
-
-    /* Now broadcast weights tensors */
-    for ( i = 0 ; i < num_layers; ++i ) {
-      MPI_Bcast(ref_fil_libxsmm[i], C[i]*C[i+1], MPI_FLOAT, 0, MPI_COMM_WORLD);
-    }
-
-    /* Now broadcast bias tensors */
-    for ( i = 0 ; i < num_layers; ++i ) {
-      MPI_Bcast(ref_bias_libxsmm[i], C[i], MPI_FLOAT, 0, MPI_COMM_WORLD);
-    }
-
-    /* Copy node's 0 activations, filters and bias  */
-    for ( i = 0 ; i < num_layers+2; ++i ) {
-      memcpy(act_libxsmm[i], ref_act_libxsmm[i], MB * C[i] * sizeof(float));
-    }
-
-    for ( i = 0 ; i < num_layers; ++i ) {
-      memcpy(fil_libxsmm[i], ref_fil_libxsmm[i], C[i] * C[i+1] * sizeof(float));
-    }
-
-    for ( i = 0 ; i < num_layers; ++i ) {
-      memcpy(bias_libxsmm[i], ref_bias_libxsmm[i], C[i] * sizeof(float));
-    }
-  } else {
-    /* First receive activations from rank 0 */
-    for ( i = 0 ; i < num_layers+2; ++i ) {
-      MPI_Recv(act_libxsmm[i], MB * C[i], MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
-
-    /* Now broadcast weights tensors */
-    for ( i = 0 ; i < num_layers; ++i ) {
-      MPI_Bcast(fil_libxsmm[i], C[i]*C[i+1], MPI_FLOAT, 0, MPI_COMM_WORLD);
-    }
-
-    /* Now broadcast bias tensors */
-    for ( i = 0 ; i < num_layers; ++i ) {
-      MPI_Bcast(bias_libxsmm[i], C[i], MPI_FLOAT, 0, MPI_COMM_WORLD);
+      init_buf( bias_libxsmm[i], C[i+1], 0, 0 );
     }
   }
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  /* Scatter the activations to all processes */
+  for ( i = 0 ; i < num_layers+2; ++i ) {
+    MPI_Scatter(ref_act_libxsmm[i], MB * C[i], MPI_FLOAT, act_libxsmm[i], MB * C[i], MPI_FLOAT, 0, MPI_COMM_WORLD);
+  }
+
+  /* Now broadcast weights tensors */
+  for ( i = 0 ; i < num_layers; ++i ) {
+    MPI_Bcast(fil_libxsmm[i], C[i]*C[i+1], MPI_FLOAT, 0, MPI_COMM_WORLD);
+  }
+
+  /* Now broadcast bias tensors */
+  for ( i = 0 ; i < num_layers; ++i ) {
+    MPI_Bcast(bias_libxsmm[i], C[i], MPI_FLOAT, 0, MPI_COMM_WORLD);
+  }
 
   if (rank == 0) {
     printf("\n");
@@ -436,13 +395,13 @@ int main(int argc, char* argv[])
   }
   CHKERR_LIBXSMM_DNN( libxsmm_dnn_softmaxloss_bind_scratch(    libxsmm_softmax,     scratch ) );
 
-  if (type == 'A' || type == 'F') {
+  if (type == 'F') {
     if (rank == 0) {
       printf("##########################################\n");
       printf("#   Performance - FWD (custom-Storage)   #\n");
       printf("##########################################\n");
     }
-    
+
     MPI_Barrier(MPI_COMM_WORLD);
     l_start = libxsmm_timer_tick();
 #if defined(_OPENMP)
@@ -467,7 +426,7 @@ int main(int argc, char* argv[])
 
     gflop = 0.0;
     for ( i = 0; i < num_layers; ++i) {
-      gflop += (2.0*(double)MB*(double)C[i]*(double)C[i+1]*(double)iters) / (1000.0*1000.0*1000.0);
+      gflop += (2.0*(double)global_MB*(double)C[i]*(double)C[i+1]*(double)iters) / (1000.0*1000.0*1000.0);
     }
     if (rank == 0) {
       printf("GFLOP  = %.5g\n", gflop/(double)iters);
@@ -481,7 +440,7 @@ int main(int argc, char* argv[])
     }
   }
 
-  if (type == 'A' || type == 'B') {
+  if (type == 'B') {
     if (rank == 0) {
       printf("##########################################\n");
       printf("#   Performance - BWD (custom-Storage)   #\n");
@@ -505,7 +464,7 @@ int main(int argc, char* argv[])
           /* Thread 0 issues asunchronous all reduce  */
           if (tid == 0) {
             MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[i], C[i]*C[i+1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[i%2]);
-          }          
+          }
           /* Wait for the MPI_Iallreduce to complete */
           if (i < num_layers-1) {
             if (tid == 0) {
@@ -522,11 +481,11 @@ int main(int argc, char* argv[])
         /* All threads wait for the all-reduce to complete in order to execute the optimizer... */
         #pragma omp barrier
         libxsmm_dnn_optimizer_execute_st( libxsmm_opt[1], 0, tid );
-        
+
         libxsmm_dnn_fullyconnected_execute_st( libxsmm_fc_layer[0], LIBXSMM_DNN_COMPUTE_KIND_UPD, 0, tid );
         if (tid == 0) {
           MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[0], C[0]*C[1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[0]);
-          MPI_Wait(&reques[0]t, MPI_STATUS_IGNORE);
+          MPI_Wait(&request[0], MPI_STATUS_IGNORE);
         }
 
         /* All threads wait for the all-reduce to complete in order to execute the optimizer... */
@@ -540,9 +499,9 @@ int main(int argc, char* argv[])
 
     gflop = 0.0;
     for ( i = num_layers-1; i > 0; --i) {
-      gflop += (4.0*(double)MB*(double)C[i]*(double)C[i+1]*(double)iters) / (1000.0*1000.0*1000.0);
+      gflop += (4.0*(double)global_MB*(double)C[i]*(double)C[i+1]*(double)iters) / (1000.0*1000.0*1000.0);
     }
-    gflop += (2.0*(double)MB*(double)C[0]*(double)C[1]*(double)iters) / (1000.0*1000.0*1000.0);
+    gflop += (2.0*(double)global_MB*(double)C[0]*(double)C[1]*(double)iters) / (1000.0*1000.0*1000.0);
 
     if (rank == 0) {
       printf("GFLOP  = %.5g\n", gflop/(double)iters);
@@ -556,9 +515,9 @@ int main(int argc, char* argv[])
     }
     MPI_Barrier(MPI_COMM_WORLD);
 #if 1
-    if (rank == nodes - 1) {
+    if (rank == n_procs - 1) {
       libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, fil_libxsmm[0], fil_libxsmm[0], 0, 0);
-      printf("\nL1 reference  : %.25g\n\n", norms.l1_ref);
+      printf("\nL1 of layer's 0 weights after training : %.25g\n\n", norms.l1_ref);
     }
 #endif
   }
@@ -591,7 +550,7 @@ int main(int argc, char* argv[])
           /* Thread 0 issues asunchronous all reduce  */
           if (tid == 0) {
             MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[i], C[i]*C[i+1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[i%2]);
-          }          
+          }
           /* Wait for the MPI_Iallreduce to complete */
           if (i < num_layers-1) {
             if (tid == 0) {
@@ -608,11 +567,11 @@ int main(int argc, char* argv[])
         /* All threads wait for the all-reduce to complete in order to execute the optimizer... */
         #pragma omp barrier
         libxsmm_dnn_optimizer_execute_st( libxsmm_opt[1], 0, tid );
-        
+
         libxsmm_dnn_fullyconnected_execute_st( libxsmm_fc_layer[0], LIBXSMM_DNN_COMPUTE_KIND_UPD, 0, tid );
         if (tid == 0) {
           MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[0], C[0]*C[1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[0]);
-          MPI_Wait(&reques[0]t, MPI_STATUS_IGNORE);
+          MPI_Wait(&request[0], MPI_STATUS_IGNORE);
         }
 
         /* All threads wait for the all-reduce to complete in order to execute the optimizer... */
@@ -626,9 +585,9 @@ int main(int argc, char* argv[])
 
     gflop = 0.0;
     for ( i = num_layers-1; i > 0; --i) {
-      gflop += (6.0*(double)MB*(double)C[i]*(double)C[i+1]*(double)iters) / (1000.0*1000.0*1000.0);
+      gflop += (6.0*(double)global_MB*(double)C[i]*(double)C[i+1]*(double)iters) / (1000.0*1000.0*1000.0);
     }
-    gflop += (4.0*(double)MB*(double)C[0]*(double)C[1]*(double)iters) / (1000.0*1000.0*1000.0);
+    gflop += (4.0*(double)global_MB*(double)C[0]*(double)C[1]*(double)iters) / (1000.0*1000.0*1000.0);
 
     if (rank == 0) {
       printf("GFLOP  = %.5g\n", gflop/(double)iters);
@@ -642,9 +601,9 @@ int main(int argc, char* argv[])
     }
     MPI_Barrier(MPI_COMM_WORLD);
 #if 1
-    if (rank == nodes - 1) {
+    if (rank == n_procs - 1) {
       libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, fil_libxsmm[0], fil_libxsmm[0], 0, 0);
-      printf("\nL1 reference  : %.25g\n\n", norms.l1_ref);
+      printf("\nL1 of layer's 0 weights after training : %.25g\n\n", norms.l1_ref);
     }
 #endif
   }
@@ -726,24 +685,11 @@ int main(int argc, char* argv[])
 
   free( C );
 
-  /* some empty lines at the end */
-  if (rank == 0) {
-    printf("\n\n\n");
-  }
-
   if (rank == 0) {
     for ( i = 0 ; i < num_layers+2; ++i ) {
-      libxsmm_free(ref_act_libxsmm[i]); 
+      libxsmm_free(ref_act_libxsmm[i]);
     }
     free(ref_act_libxsmm);
-    for ( i = 0 ; i < num_layers; ++i ) {
-      libxsmm_free(ref_fil_libxsmm[i]); 
-    }
-    free(ref_fil_libxsmm);
-    for ( i = 0 ; i < num_layers; ++i ) {
-      libxsmm_free(ref_bias_libxsmm[i]);
-    }
-    free(ref_bias_libxsmm);
   }
 
   /* Finalize the MPI environment */

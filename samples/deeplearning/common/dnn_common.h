@@ -299,8 +299,10 @@ LIBXSMM_INLINE void init_buf(float* buf, size_t size, int initPos, int initOne)
 {
   int i;
   zero_buf(buf, size);
+#if 0
 #if defined(_OPENMP)
 # pragma omp parallel for private(i)
+#endif
 #endif
   for (i = 0; i < (int)size; ++i) {
     buf[i] = (float)((initOne != 0) ? 1.0 : ((initPos != 0) ? libxsmm_rng_f64() : (0.05 - libxsmm_rng_f64()/10.0)));
