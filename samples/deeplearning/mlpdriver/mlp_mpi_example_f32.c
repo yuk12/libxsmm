@@ -461,12 +461,12 @@ int main(int argc, char* argv[])
         libxsmm_dnn_softmaxloss_execute_st( libxsmm_softmax, LIBXSMM_DNN_COMPUTE_KIND_BWD, 0, tid );
         for ( i = num_layers-1; i > 0; --i) {
           libxsmm_dnn_fullyconnected_execute_st( libxsmm_fc_layer[i], LIBXSMM_DNN_COMPUTE_KIND_BWDUPD, 0, tid );
-          /* Thread 0 issues asunchronous all reduce  */
+          /* Thread 0 issues asynchronous all reduce */
           if (tid == 0) {
             MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[i], C[i]*C[i+1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[i%2]);
           }
-          /* Wait for the MPI_Iallreduce to complete */
           if (i < num_layers-1) {
+            /* Wait for the MPI_Iallreduce issued in the previous iteration to complete */
             if (tid == 0) {
               MPI_Wait(&request[(i+1)%2], MPI_STATUS_IGNORE);
             }
@@ -475,19 +475,21 @@ int main(int argc, char* argv[])
             libxsmm_dnn_optimizer_execute_st( libxsmm_opt[i+1], 0, tid );
           }
         }
+        /* Only UPD pass for first layer */
+        libxsmm_dnn_fullyconnected_execute_st( libxsmm_fc_layer[0], LIBXSMM_DNN_COMPUTE_KIND_UPD, 0, tid );
         if (tid == 0) {
-          MPI_Wait(&request[(i+1)%2], MPI_STATUS_IGNORE);
+          MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[0], C[0]*C[1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[0]);
+        }
+        if (tid == 0) {
+          MPI_Wait(&request[1], MPI_STATUS_IGNORE);
         }
         /* All threads wait for the all-reduce to complete in order to execute the optimizer... */
         #pragma omp barrier
         libxsmm_dnn_optimizer_execute_st( libxsmm_opt[1], 0, tid );
 
-        libxsmm_dnn_fullyconnected_execute_st( libxsmm_fc_layer[0], LIBXSMM_DNN_COMPUTE_KIND_UPD, 0, tid );
         if (tid == 0) {
-          MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[0], C[0]*C[1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[0]);
           MPI_Wait(&request[0], MPI_STATUS_IGNORE);
         }
-
         /* All threads wait for the all-reduce to complete in order to execute the optimizer... */
         #pragma omp barrier
         libxsmm_dnn_optimizer_execute_st( libxsmm_opt[0], 0, tid );
@@ -547,12 +549,12 @@ int main(int argc, char* argv[])
         libxsmm_dnn_softmaxloss_execute_st( libxsmm_softmax, LIBXSMM_DNN_COMPUTE_KIND_BWD, 0, tid );
         for ( i = num_layers-1; i > 0; --i) {
           libxsmm_dnn_fullyconnected_execute_st( libxsmm_fc_layer[i], LIBXSMM_DNN_COMPUTE_KIND_BWDUPD, 0, tid );
-          /* Thread 0 issues asunchronous all reduce  */
+          /* Thread 0 issues asynchronous all reduce */
           if (tid == 0) {
             MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[i], C[i]*C[i+1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[i%2]);
           }
-          /* Wait for the MPI_Iallreduce to complete */
           if (i < num_layers-1) {
+            /* Wait for the MPI_Iallreduce issued in the previous iteration to complete */
             if (tid == 0) {
               MPI_Wait(&request[(i+1)%2], MPI_STATUS_IGNORE);
             }
@@ -561,19 +563,21 @@ int main(int argc, char* argv[])
             libxsmm_dnn_optimizer_execute_st( libxsmm_opt[i+1], 0, tid );
           }
         }
+        /* Only UPD pass for first layer */
+        libxsmm_dnn_fullyconnected_execute_st( libxsmm_fc_layer[0], LIBXSMM_DNN_COMPUTE_KIND_UPD, 0, tid );
         if (tid == 0) {
-          MPI_Wait(&request[(i+1)%2], MPI_STATUS_IGNORE);
+          MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[0], C[0]*C[1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[0]);
+        }
+        if (tid == 0) {
+          MPI_Wait(&request[1], MPI_STATUS_IGNORE);
         }
         /* All threads wait for the all-reduce to complete in order to execute the optimizer... */
         #pragma omp barrier
         libxsmm_dnn_optimizer_execute_st( libxsmm_opt[1], 0, tid );
 
-        libxsmm_dnn_fullyconnected_execute_st( libxsmm_fc_layer[0], LIBXSMM_DNN_COMPUTE_KIND_UPD, 0, tid );
         if (tid == 0) {
-          MPI_Iallreduce(MPI_IN_PLACE, delfil_libxsmm[0], C[0]*C[1], MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD, &request[0]);
           MPI_Wait(&request[0], MPI_STATUS_IGNORE);
         }
-
         /* All threads wait for the all-reduce to complete in order to execute the optimizer... */
         #pragma omp barrier
         libxsmm_dnn_optimizer_execute_st( libxsmm_opt[0], 0, tid );
