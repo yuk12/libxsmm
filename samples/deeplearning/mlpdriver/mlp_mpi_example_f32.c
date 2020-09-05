@@ -30,7 +30,7 @@ int main(int argc, char* argv[])
   /* Initialize the MPI environment */
   MPI_Init(&argc, &argv);
 
-  float **act_libxsmm, **ref_act_libxsmm, **fil_libxsmm, **delact_libxsmm, **delfil_libxsmm;
+  float **act_libxsmm, **ref_act_libxsmm, **fil_libxsmm, **delact_libxsmm, **ref_delact_libxsmm, **delfil_libxsmm;
   float **bias_libxsmm, **delbias_libxsmm;
   unsigned char **relumask_libxsmm;
   void* scratch = NULL;
@@ -168,6 +168,7 @@ int main(int argc, char* argv[])
   act_libxsmm    = (float**)malloc( (num_layers+2)*sizeof(float*) );
   ref_act_libxsmm = (float**)malloc( (num_layers+2)*sizeof(float*) );
   delact_libxsmm = (float**)malloc( (num_layers+1)*sizeof(float*) );
+  ref_delact_libxsmm = (float**)malloc( (num_layers+1)*sizeof(float*) );
   for ( i = 0 ; i < num_layers+2; ++i ) {
     act_libxsmm[i]                = (float*)libxsmm_aligned_malloc( MB*C[i]*sizeof(float), 2097152);
     /* softmax has no incoming gradients */
@@ -196,6 +197,10 @@ int main(int argc, char* argv[])
   if (rank == 0) {
     for ( i = 0 ; i < num_layers+2; ++i ) {
       ref_act_libxsmm[i]                = (float*)libxsmm_aligned_malloc( global_MB*C[i]*sizeof(float), 2097152);
+      /* softmax has no incoming gradients */
+      if ( i < num_layers+1 ) {
+        ref_delact_libxsmm[i]             = (float*)libxsmm_aligned_malloc( global_MB*C[i]*sizeof(float), 2097152);
+      }
     }
     /* init data */
     for ( i = 0 ; i < num_layers+2; ++i ) {
@@ -207,11 +212,19 @@ int main(int argc, char* argv[])
     for ( i = 0 ; i < num_layers; ++i ) {
       init_buf( bias_libxsmm[i], C[i+1], 0, 0 );
     }
+    for ( i = 0 ; i < num_layers+1; ++i ) {
+      init_buf( ref_delact_libxsmm[i], global_MB*C[i], 0, 0 );
+    }
   }
 
   /* Scatter the activations to all processes */
   for ( i = 0 ; i < num_layers+2; ++i ) {
     MPI_Scatter(ref_act_libxsmm[i], MB * C[i], MPI_FLOAT, act_libxsmm[i], MB * C[i], MPI_FLOAT, 0, MPI_COMM_WORLD);
+  }
+
+  /* Scatter the del_activations to all processes */
+  for ( i = 0 ; i < num_layers+1; ++i ) {
+    MPI_Scatter(ref_delact_libxsmm[i], MB * C[i], MPI_FLOAT, delact_libxsmm[i], MB * C[i], MPI_FLOAT, 0, MPI_COMM_WORLD);
   }
 
   /* Now broadcast weights tensors */
@@ -518,8 +531,8 @@ int main(int argc, char* argv[])
     MPI_Barrier(MPI_COMM_WORLD);
 #if 1
     if (rank == n_procs - 1) {
-      libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, fil_libxsmm[0], fil_libxsmm[0], 0, 0);
-      printf("\nL1 of layer's 0 weights after training : %.25g\n\n", norms.l1_ref);
+      libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, delfil_libxsmm[0], fil_libxsmm[0], 0, 0);
+      printf("\nL1 of layer's 0 dweights after training : %.25g\n\n", norms.l1_ref);
     }
 #endif
   }
@@ -606,8 +619,8 @@ int main(int argc, char* argv[])
     MPI_Barrier(MPI_COMM_WORLD);
 #if 1
     if (rank == n_procs - 1) {
-      libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, fil_libxsmm[0], fil_libxsmm[0], 0, 0);
-      printf("\nL1 of layer's 0 weights after training : %.25g\n\n", norms.l1_ref);
+      libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, delfil_libxsmm[0], delfil_libxsmm[0], 0, 0);
+      printf("\nL1 of layer's 0 dweights after training : %.25g\n\n", norms.l1_ref);
     }
 #endif
   }
@@ -694,6 +707,10 @@ int main(int argc, char* argv[])
       libxsmm_free(ref_act_libxsmm[i]);
     }
     free(ref_act_libxsmm);
+    for ( i = 0 ; i < num_layers+1; ++i ) {
+      libxsmm_free(ref_delact_libxsmm[i]);
+    }
+    free(ref_delact_libxsmm);
   }
 
   /* Finalize the MPI environment */

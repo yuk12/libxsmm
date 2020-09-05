@@ -447,8 +447,8 @@ int main(int argc, char* argv[])
       printf("%i,", C[i] );
     }
     printf("%f,%f\n", ((double)(l_total/iters)), gflop/l_total);
-    libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, fil_libxsmm[0], fil_libxsmm[0], 0, 0);
-    printf("\nL1 of layer's 0 weights after training : %.25g\n\n", norms.l1_ref);
+    libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, delfil_libxsmm[0], delfil_libxsmm[0], 0, 0);
+    printf("\nL1 of layer's 0 dweights after training : %.25g\n\n", norms.l1_ref);
   }
 
   if (type == 'A') {
@@ -495,8 +495,8 @@ int main(int argc, char* argv[])
       printf("%i,", C[i] );
     }
     printf("%f,%f\n", ((double)(l_total/iters)), gflop/l_total);
-    libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, fil_libxsmm[0], fil_libxsmm[0], 0, 0);
-    printf("\nL1 of layer's 0 weights after training : %.25g\n\n", norms.l1_ref);
+    libxsmm_matdiff(&norms, LIBXSMM_DATATYPE_F32, C[0]*C[1], 1, delfil_libxsmm[0], delfil_libxsmm[0], 0, 0);
+    printf("\nL1 of layer's 0 dweights after training : %.25g\n\n", norms.l1_ref);
   }
 
   for ( i = 0; i < num_layers; ++i ) {
