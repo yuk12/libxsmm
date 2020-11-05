@@ -369,7 +369,7 @@ int main(int argc, char* argv[])
   }
   CHKERR_LIBXSMM_DNN( libxsmm_dnn_softmaxloss_bind_scratch(    libxsmm_softmax,     scratch ) );
 
-  if (type == 'A' || type == 'F') {
+  if (type == 'F') {
     printf("##########################################\n");
     printf("#   Performance - FWD (custom-Storage)   #\n");
     printf("##########################################\n");
@@ -407,7 +407,7 @@ int main(int argc, char* argv[])
     printf("%f,%f\n", ((double)(l_total/iters)), gflop/l_total);
   }
 
-  if (type == 'A' || type == 'B') {
+  if (type == 'B') {
     printf("##########################################\n");
     printf("#   Performance - BWD (custom-Storage)   #\n");
     printf("##########################################\n");
