@@ -28,7 +28,8 @@
 int main(int argc, char* argv[])
 {
   /* Initialize the MPI environment */
-  MPI_Init(&argc, &argv);
+  int threadmode;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &threadmode);
 
   float **act_libxsmm, **ref_act_libxsmm, **fil_libxsmm, **delact_libxsmm, **ref_delact_libxsmm, **delfil_libxsmm;
   float **bias_libxsmm, **delbias_libxsmm;
@@ -191,6 +192,20 @@ int main(int argc, char* argv[])
   relumask_libxsmm = (unsigned char**)malloc( num_layers*sizeof(unsigned char*) );
   for ( i = 0 ; i < num_layers; ++i ) {
     relumask_libxsmm[i]           = (unsigned char*)libxsmm_aligned_malloc( MB*C[i+1]*sizeof(unsigned char), 2097152);
+  }
+
+  /* init data on every node for numa awarness */
+  for ( i = 0 ; i < num_layers+2; ++i ) {
+    init_buf( act_libxsmm[i], MB*C[i], 0, 0 );
+  }
+  for ( i = 0 ; i < num_layers; ++i ) {
+    init_buf( fil_libxsmm[i], C[i]*C[i+1], 0, 0 );
+  }
+  for ( i = 0 ; i < num_layers; ++i ) {
+    init_buf( bias_libxsmm[i], C[i+1], 0, 0 );
+  }
+  for ( i = 0 ; i < num_layers+1; ++i ) {
+    init_buf( delact_libxsmm[i], MB*C[i], 0, 0 );
   }
 
   /* Serial initialization of data on proc 0 */
