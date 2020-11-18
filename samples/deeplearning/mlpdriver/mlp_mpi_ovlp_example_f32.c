@@ -209,6 +209,20 @@ int main(int argc, char* argv[])
     relumask_libxsmm[i]           = (unsigned char*)libxsmm_aligned_malloc( MB*C[i+1]*sizeof(unsigned char), 2097152);
   }
 
+  /* init data on every node for numa awarness */
+  for ( i = 0 ; i < num_layers+2; ++i ) {
+    init_buf( act_libxsmm[i], MB*C[i], 0, 0 );
+  }
+  for ( i = 0 ; i < num_layers; ++i ) {
+    init_buf( fil_libxsmm[i], C[i]*C[i+1], 0, 0 );
+  }
+  for ( i = 0 ; i < num_layers; ++i ) {
+    init_buf( bias_libxsmm[i], C[i+1], 0, 0 );
+  }
+  for ( i = 0 ; i < num_layers+1; ++i ) {
+    init_buf( delact_libxsmm[i], MB*C[i], 0, 0 );
+  }
+
   /* Serial initialization of data on proc 0 */
   if (rank == 0) {
     for ( i = 0 ; i < num_layers+2; ++i ) {
