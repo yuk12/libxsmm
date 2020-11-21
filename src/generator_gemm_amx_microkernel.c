@@ -772,7 +772,7 @@ void single_tilestore( libxsmm_generated_code*            io_generated_code,
                   (col + 1) * i_xgemm_desc->ldc * i_micro_kernel_config->datatype_size,
                   i_micro_kernel_config->vector_name,
                   reg_f32, 0, 1, 0 );
-              
+
               libxsmm_x86_instruction_vec_compute_reg( io_generated_code,
                                        i_micro_kernel_config->instruction_set,
                                        LIBXSMM_X86_INSTR_VFMADD213PS,
@@ -826,7 +826,7 @@ void single_tilestore( libxsmm_generated_code*            io_generated_code,
                       LIBXSMM_X86_INSTR_VCVTNE2PS2BF16,
                       i_micro_kernel_config->vector_name,
                       reg_pair, reg_0, reg_0, 0);
-                            
+
             } else {
               libxsmm_x86_instruction_vec_compute_mem( io_generated_code,
                                                        i_micro_kernel_config->instruction_set,
@@ -871,7 +871,7 @@ void single_tilestore( libxsmm_generated_code*            io_generated_code,
     }
   }
   if (i_micro_kernel_config->fuse_fma > 0) {
-    libxsmm_x86_instruction_pop_reg( io_generated_code, fp32_C_gp_reg );        
+    libxsmm_x86_instruction_pop_reg( io_generated_code, fp32_C_gp_reg );
   }
 }
 

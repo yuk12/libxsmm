@@ -597,7 +597,7 @@ my_fc_bwd_config setup_my_fc_bwd(libxsmm_blasint N, libxsmm_blasint C, libxsmm_b
   }
   l_flags = l_flags | LIBXSMM_GEMM_FLAG_VNNI_C;
 
-  res.gemm_upd4 = libxsmm_bmmdispatch_reducebatch_strd_meltwfused_unroll(updM, updN, res.bn, res.bk*res.bn*sizeof(libxsmm_bfloat16), res.bc*res.bn*sizeof(libxsmm_bfloat16), unroll_hint, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL, LIBXSMM_MELTW_OPERATION_FMADD, LIBXSMM_DATATYPE_BF16, 0, 0, 0, 0, 0,);
+  res.gemm_upd4 = libxsmm_bmmdispatch_reducebatch_strd_meltwfused_unroll(updM, updN, res.bn, res.bk*res.bn*sizeof(libxsmm_bfloat16), res.bc*res.bn*sizeof(libxsmm_bfloat16), unroll_hint, &lda, &ldb, &ldc, &alpha, &zerobeta, &l_flags, NULL, LIBXSMM_MELTW_OPERATION_FMADD, LIBXSMM_DATATYPE_BF16, 0, 0, 0, 0, 0);
   if ( res.gemm_upd4 == NULL ) {
     fprintf( stderr, "JIT for BRGEMM TPP gemm_upd4 failed. Bailing...!\n");
     exit(-1);
@@ -1333,42 +1333,10 @@ if (cfg.upd_2d_blocking == 0) {
                 cfg.norm_to_normT_kernel(&trans_param);
               }
             }
-
-            /* Prefetch SGD sub-tensors */
-#if 0
-            {
-              __m512 vlr = _mm512_set1_ps( cfg.lr );
-              libxsmm_bfloat16 *dwt_bf16 = (libxsmm_bfloat16*)  &LIBXSMM_VLA_ACCESS(5, dfilter,        ofm1, ifm1, 0, 0, 0, nBlocksIFm, bc_lp, bk, lpb);
-              libxsmm_bfloat16 *wt_bf16  = (libxsmm_bfloat16*)  &LIBXSMM_VLA_ACCESS(5, filter,         ofm1, ifm1, 0, 0, 0, nBlocksIFm, bc_lp, bk, lpb);
-              float *wt_fp32             = (float*)             &LIBXSMM_VLA_ACCESS(4, master_filter,  ofm1, ifm1, 0, 0, nBlocksIFm, bc, bk);
-              for ( i = 0; i < bc*bk; i+=32 ) {
-                _mm_prefetch((libxsmm_bfloat16*)dwt_bf16 + i, _MM_HINT_T0);
-                _mm_prefetch((libxsmm_bfloat16*)wt_bf16 + i, _MM_HINT_T0);             
-                _mm_prefetch((float*)wt_fp32+i, _MM_HINT_T0);
-                _mm_prefetch((float*)wt_fp32+i+16, _MM_HINT_T0);
-              }
-            }
-#endif
             float LR = cfg.lr;
             eltwise_params_bwd.bias_ptr = &LR;
             eltwise_params_bwd.sparse_bitmap = &LIBXSMM_VLA_ACCESS(4, master_filter,  ofm1, ifm1, 0, 0, nBlocksIFm, bc, bk);
-            cfg.gemm_upd4(&LIBXSMM_VLA_ACCESS(4, tmp_doutput_tr, 0, 0, 0, 0, bn_lp, bk, lpb), &LIBXSMM_VLA_ACCESS(4, tmp_input_tr, ifm1-my_im_start, 0, 0, 0, nBlocksMB, bc, bn), &LIBXSMM_VLA_ACCESS(5, filter, ofm1, ifm1, 0, 0, 0, nBlocksIFm, bc_lp, bk, lpb), &blocks);
-#if 0
-            {
-              __m512 vlr = _mm512_set1_ps( cfg.lr );
-              libxsmm_bfloat16 *dwt_bf16 = (libxsmm_bfloat16*)  &LIBXSMM_VLA_ACCESS(5, dfilter,        ofm1, ifm1, 0, 0, 0, nBlocksIFm, bc_lp, bk, lpb);
-              libxsmm_bfloat16 *wt_bf16  = (libxsmm_bfloat16*)  &LIBXSMM_VLA_ACCESS(5, filter,         ofm1, ifm1, 0, 0, 0, nBlocksIFm, bc_lp, bk, lpb);
-              float *wt_fp32  = (float*)             &LIBXSMM_VLA_ACCESS(4, master_filter,  ofm1, ifm1, 0, 0, nBlocksIFm, bc, bk);
-              for ( i = 0; i < bc*bk; i+=32 ) {
-                __m512 newfilter = _mm512_sub_ps( _mm512_loadu_ps( (float*)wt_fp32+i ), _mm512_mul_ps( vlr, _mm512_load_fil( (libxsmm_bfloat16*)dwt_bf16 + i ) ) );
-                __m512 newfilter2 = _mm512_sub_ps( _mm512_loadu_ps( (float*)wt_fp32+i+16 ), _mm512_mul_ps( vlr, _mm512_load_fil( (libxsmm_bfloat16*)dwt_bf16 + i + 16 ) ) );
-                _mm512_storeu_ps( (float*)((libxsmm_bfloat16*)wt_bf16+i), (__m512) _mm512_cvtne2ps_pbh (newfilter2, newfilter));
-                _mm512_stream_ps( (float*)wt_fp32+i, newfilter );
-                _mm512_stream_ps( (float*)wt_fp32+i+16, newfilter2 );
-              
-              }
-#endif
-            }
+            cfg.gemm_upd4(&LIBXSMM_VLA_ACCESS(4, tmp_doutput_tr, 0, 0, 0, 0, bn_lp, bk, lpb), &LIBXSMM_VLA_ACCESS(4, tmp_input_tr, ifm1-my_im_start, 0, 0, 0, nBlocksMB, bc, bn), &LIBXSMM_VLA_ACCESS(5, filter, ofm1, ifm1, 0, 0, 0, nBlocksIFm, bc_lp, bk, lpb), &blocks, &eltwise_params_bwd);
           }
         }
       } else {

@@ -956,11 +956,11 @@ void libxsmm_generator_gemm_amx_setup_fusion_infra( libxsmm_generated_code*     
       return;
     }
   }
-  
+
   if (i_micro_kernel_config->fuse_fma == 1) {
     i_micro_kernel_config->lr_zmm = reserved_zmms;
     reserved_zmms++;
-    libxsmm_generator_gemm_getval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_ELT_BIAS_PTR, temp_reg ); 
+    libxsmm_generator_gemm_getval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_ELT_BIAS_PTR, temp_reg );
     libxsmm_x86_instruction_vec_move( io_generated_code, i_micro_kernel_config->instruction_set, LIBXSMM_X86_INSTR_VBROADCASTSS, temp_reg, LIBXSMM_X86_GP_REG_UNDEF, 0,
         0, i_micro_kernel_config->vector_name, i_micro_kernel_config->lr_zmm, 0, 1, 0 );
   }
@@ -1146,6 +1146,11 @@ void libxsmm_generator_gemm_amx_setup_stack_frame( libxsmm_generated_code*      
   if (i_micro_kernel_config->fused_relu_bwd == 1) {
     has_eltwise_fused = 1;
     i_micro_kernel_config->fused_eltwise = 1;
+  }
+
+
+  if (i_xgemm_desc->meltw_operation == LIBXSMM_MELTW_OPERATION_FMADD) {
+    i_micro_kernel_config->fuse_fma = 1;
   }
 
   if (i_micro_kernel_config->fuse_fma == 1) {
@@ -1372,7 +1377,7 @@ void libxsmm_generator_gemm_amx_setup_stack_frame( libxsmm_generated_code*      
     }
     if (i_micro_kernel_config->fuse_fma == 1) {
       libxsmm_x86_instruction_alu_mem( io_generated_code, i_micro_kernel_config->alu_mov_instruction, eltwise_struct_ptr_reg, LIBXSMM_X86_GP_REG_UNDEF, 0,   0, temp_reg, 0 );
-      libxsmm_generator_gemm_setval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_ELT_BIAS_PTR, temp_reg );  
+      libxsmm_generator_gemm_setval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_ELT_BIAS_PTR, temp_reg );
       libxsmm_x86_instruction_alu_mem( io_generated_code, i_micro_kernel_config->alu_mov_instruction, eltwise_struct_ptr_reg, LIBXSMM_X86_GP_REG_UNDEF, 0,   16, temp_reg, 0 );
       libxsmm_generator_gemm_setval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_TRANS_EXT_BUF_B, temp_reg );
     }
