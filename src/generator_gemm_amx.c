@@ -914,6 +914,7 @@ void libxsmm_generator_gemm_amx_setup_fusion_infra( libxsmm_generated_code*     
   i_micro_kernel_config->fused_sigmoid      = 0;
   i_micro_kernel_config->overwrite_C        = 0;
   i_micro_kernel_config->vnni_format_C      = 0;
+  i_micro_kernel_config->fuse_fma           = 0;
 
   /* TODO: Add support fror more fusions  */
   if ((i_xgemm_desc->meltw_operation == LIBXSMM_MELTW_OPERATION_COLBIAS_ACT) || (i_xgemm_desc->meltw_operation == LIBXSMM_MELTW_OPERATION_COLBIAS_ACT_DECOMPRESS_A) ||
@@ -943,6 +944,10 @@ void libxsmm_generator_gemm_amx_setup_fusion_infra( libxsmm_generated_code*     
     i_micro_kernel_config->vnni_format_C  = ((i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_VNNI_C) > 0) ? 1 : 0;
   }
 
+  if (i_xgemm_desc->meltw_operation == LIBXSMM_MELTW_OPERATION_FMADD) {
+    i_micro_kernel_config->fuse_fma = 1;
+  }
+
   if (i_micro_kernel_config->vnni_cvt_output_ext_buf == 1) {
     if (i_micro_kernel_config->vnni_format_C == 1) {
       /* For now we support C norm->vnni external only when C is norm */
@@ -950,6 +955,14 @@ void libxsmm_generator_gemm_amx_setup_fusion_infra( libxsmm_generated_code*     
       LIBXSMM_HANDLE_ERROR( io_generated_code, LIBXSMM_ERR_GENERAL );
       return;
     }
+  }
+  
+  if (i_micro_kernel_config->fuse_fma == 1) {
+    i_micro_kernel_config->lr_zmm = reserved_zmms;
+    reserved_zmms++;
+    libxsmm_generator_gemm_getval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_ELT_BIAS_PTR, temp_reg ); 
+    libxsmm_x86_instruction_vec_move( io_generated_code, i_micro_kernel_config->instruction_set, LIBXSMM_X86_INSTR_VBROADCASTSS, temp_reg, LIBXSMM_X86_GP_REG_UNDEF, 0,
+        0, i_micro_kernel_config->vector_name, i_micro_kernel_config->lr_zmm, 0, 1, 0 );
   }
 
   /* Setup zmms to be reused throughout the kernel  */
@@ -1131,6 +1144,11 @@ void libxsmm_generator_gemm_amx_setup_stack_frame( libxsmm_generated_code*      
   }
 
   if (i_micro_kernel_config->fused_relu_bwd == 1) {
+    has_eltwise_fused = 1;
+    i_micro_kernel_config->fused_eltwise = 1;
+  }
+
+  if (i_micro_kernel_config->fuse_fma == 1) {
     has_eltwise_fused = 1;
     i_micro_kernel_config->fused_eltwise = 1;
   }
@@ -1349,6 +1367,12 @@ void libxsmm_generator_gemm_amx_setup_stack_frame( libxsmm_generated_code*      
       libxsmm_generator_gemm_setval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_ELT_RELU_BITMASK_PTR, temp_reg );
     }
     if (i_micro_kernel_config->norm_to_normT_B_ext_buf == 1) {
+      libxsmm_x86_instruction_alu_mem( io_generated_code, i_micro_kernel_config->alu_mov_instruction, eltwise_struct_ptr_reg, LIBXSMM_X86_GP_REG_UNDEF, 0,   16, temp_reg, 0 );
+      libxsmm_generator_gemm_setval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_TRANS_EXT_BUF_B, temp_reg );
+    }
+    if (i_micro_kernel_config->fuse_fma == 1) {
+      libxsmm_x86_instruction_alu_mem( io_generated_code, i_micro_kernel_config->alu_mov_instruction, eltwise_struct_ptr_reg, LIBXSMM_X86_GP_REG_UNDEF, 0,   0, temp_reg, 0 );
+      libxsmm_generator_gemm_setval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_ELT_BIAS_PTR, temp_reg );  
       libxsmm_x86_instruction_alu_mem( io_generated_code, i_micro_kernel_config->alu_mov_instruction, eltwise_struct_ptr_reg, LIBXSMM_X86_GP_REG_UNDEF, 0,   16, temp_reg, 0 );
       libxsmm_generator_gemm_setval_stack_var( io_generated_code, i_micro_kernel_config, LIBXSMM_GEMM_STACK_VAR_TRANS_EXT_BUF_B, temp_reg );
     }
