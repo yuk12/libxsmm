@@ -227,6 +227,13 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
   unsigned int gp_reg_relu_bwd      = LIBXSMM_X86_GP_REG_R10;
   unsigned int fuse_relu_bwd        = i_micro_kernel_config->fused_relu_bwd;
 
+  unsigned int use_cldemote = 0;
+  const char *const env_use_cldemote = getenv("USE_CLDEMOTE");
+  if ( 0 == env_use_cldemote ) {
+  } else {
+    use_cldemote = atoi(env_use_cldemote);
+  }
+
   /* Check if we have to save the tmp registers  */
   if ( (gp_reg_gemm_scratch == i_gp_reg_mapping->gp_reg_help_1) && (i_micro_kernel_config->n_loop_exists == 1)  ) {
     libxsmm_x86_instruction_push_reg( io_generated_code, i_gp_reg_mapping->gp_reg_help_1 );
@@ -343,6 +350,14 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
           ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2),
           vname,
           reg_1, 0, 1, 1 );
+
+      if (use_cldemote > 0) {
+        libxsmm_x86_instruction_prefetch(io_generated_code,
+            LIBXSMM_X86_INSTR_CLDEMOTE,
+            i_gp_reg_mapping->gp_reg_c,
+            LIBXSMM_X86_GP_REG_UNDEF, 0,
+            ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2));
+      }
     }
 
     if (i_micro_kernel_config->fused_sigmoid == 1) {
@@ -434,6 +449,14 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
             ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2),
             vname,
             reg_0, 0, 1, 1 );
+
+        if (use_cldemote > 0) {
+          libxsmm_x86_instruction_prefetch(io_generated_code,
+              LIBXSMM_X86_INSTR_CLDEMOTE,
+              i_gp_reg_mapping->gp_reg_c,
+              LIBXSMM_X86_GP_REG_UNDEF, 0,
+              ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2));
+        }
       }
     }
 
@@ -511,6 +534,14 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
           ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2),
           vname,
           reg_0, 0, 1, 1 );
+
+      if (use_cldemote > 0) {
+        libxsmm_x86_instruction_prefetch(io_generated_code,
+            LIBXSMM_X86_INSTR_CLDEMOTE,
+            gp_reg_C,
+            LIBXSMM_X86_GP_REG_UNDEF, 0,
+            ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2));
+      }
     }
 
     if ((vnni_cvt_output_ext_buf == 1) && (eager_result_store == 1)) {
@@ -561,6 +592,14 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
             (((in_offset/2+col/2)) * i_xgemm_desc->ldc  + im_offset + 16) * 2 * (i_micro_kernel_config->datatype_size/2),
             i_micro_kernel_config->vector_name,
             prev_reg_0, 0, 1, 1 );
+
+        if (use_cldemote > 0) {
+          libxsmm_x86_instruction_prefetch(io_generated_code,
+              LIBXSMM_X86_INSTR_CLDEMOTE,
+              gp_vnni_out_ext_buf,
+              LIBXSMM_X86_GP_REG_UNDEF, 0,
+              (((in_offset/2+col/2)) * i_xgemm_desc->ldc  + im_offset + 16) * 2 * (i_micro_kernel_config->datatype_size/2));
+        }
       }
     }
   }
@@ -582,6 +621,14 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
           ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2),
           i_micro_kernel_config->vector_name,
           reg_0, 0, 1, 1 );
+
+      if (use_cldemote > 0) {
+        libxsmm_x86_instruction_prefetch(io_generated_code,
+            LIBXSMM_X86_INSTR_CLDEMOTE,
+            gp_reg_C,
+            LIBXSMM_X86_GP_REG_UNDEF, 0,
+            ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2));
+      }
 
       if (vnni_cvt_output_ext_buf == 1) {
         if (col % 2 == 1) {
@@ -615,6 +662,14 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
               i_micro_kernel_config->vector_name,
               copy_prev_reg_0, 0, 1, 1 );
 
+          if (use_cldemote > 0) {
+            libxsmm_x86_instruction_prefetch(io_generated_code,
+                LIBXSMM_X86_INSTR_CLDEMOTE,
+                gp_vnni_out_ext_buf,
+                LIBXSMM_X86_GP_REG_UNDEF, 0,
+                (((in_offset/2+col/2)) * i_xgemm_desc->ldc + im_offset) * 2 * (i_micro_kernel_config->datatype_size/2));
+          }
+
           libxsmm_x86_instruction_vec_compute_reg(io_generated_code,
               i_micro_kernel_config->instruction_set,
               LIBXSMM_X86_INSTR_VPERMT2W,
@@ -631,6 +686,14 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
               (((in_offset/2+col/2)) * i_xgemm_desc->ldc  + im_offset + 16) * 2 * (i_micro_kernel_config->datatype_size/2),
               i_micro_kernel_config->vector_name,
               prev_reg_0, 0, 1, 1 );
+
+          if (use_cldemote > 0) {
+            libxsmm_x86_instruction_prefetch(io_generated_code,
+                LIBXSMM_X86_INSTR_CLDEMOTE,
+                gp_vnni_out_ext_buf,
+                LIBXSMM_X86_GP_REG_UNDEF, 0,
+                (((in_offset/2+col/2)) * i_xgemm_desc->ldc  + im_offset + 16) * 2 * (i_micro_kernel_config->datatype_size/2));
+          }
         }
       }
     }
