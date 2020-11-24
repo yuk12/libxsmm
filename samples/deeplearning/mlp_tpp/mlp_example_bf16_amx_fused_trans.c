@@ -40,6 +40,43 @@
 
 #define _mm512_load_fil(A)   _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_cvtepi16_epi32(_mm256_loadu_si256((__m256i*)(A))),16))
 #define _mm512_store_fil(A,B)  _mm256_storeu_si256((__m256i*)(A), _mm512_cvtneps_pbh((B)))
+# define LIBXSMM_INTRINSISCS_MM512_CVTNEPS_PBH( A ) (__m256i)_mm512_cvtneps_pbh( A )
+# define LIBXSMM_INTRINSISCS_MM512_CVTNE2PS_PBH( A, B ) (__m512i)_mm512_cvtne2ps_pbh( A, B )
+#define LIBXSMM_DNN_CONVERT_BUFFER_F32_BF16(in, out, length) do { \
+  unsigned int full_chunks = length / 32; \
+  unsigned int remainder = length % 32; \
+  int __i = 0; \
+  if (remainder == 0) { \
+    for ( __i = 0; __i < length; __i+= 32) { \
+      _mm512_storeu_si512((libxsmm_bfloat16*)out+__i, LIBXSMM_INTRINSISCS_MM512_CVTNE2PS_PBH(LIBXSMM_INTRINSICS_MM512_LOAD_PS((const float*)in+__i+16), LIBXSMM_INTRINSICS_MM512_LOAD_PS((const float*)in+__i))); \
+    } \
+  } else { \
+    unsigned int chunk; \
+    for ( chunk = 0; chunk < full_chunks; chunk++) { \
+      __i = chunk * 32; \
+      _mm512_storeu_si512((libxsmm_bfloat16*)out+__i, LIBXSMM_INTRINSISCS_MM512_CVTNE2PS_PBH(LIBXSMM_INTRINSICS_MM512_LOAD_PS((const float*)in+__i+16), LIBXSMM_INTRINSICS_MM512_LOAD_PS((const float*)in+__i))); \
+    } \
+    libxsmm_rne_convert_fp32_bf16((const float*)in+32*full_chunks, (libxsmm_bfloat16*)out+32*full_chunks, remainder); \
+  } \
+} while(0)
+
+#define LIBXSMM_DNN_CONVERT_BUFFER_BF16_F32(in, out, length) do { \
+  unsigned int full_chunks = length / 16; \
+  unsigned int remainder = length % 16; \
+  int __i = 0; \
+  if (remainder == 0) { \
+    for ( __i = 0; __i < length; __i+= 16) { \
+      _mm512_storeu_ps( (float*)out+__i, LIBXSMM_INTRINSICS_MM512_CVTPBH_PS( _mm256_loadu_si256((__m256i*)((const libxsmm_bfloat16*)in+__i)))); \
+    } \
+  } else { \
+    unsigned int chunk; \
+    for ( chunk = 0; chunk < full_chunks; chunk++) { \
+      __i = chunk * 16; \
+      _mm512_storeu_ps( (float*)out+__i, LIBXSMM_INTRINSICS_MM512_CVTPBH_PS( _mm256_loadu_si256((__m256i*)((const libxsmm_bfloat16*)in+__i)))); \
+    } \
+    libxsmm_convert_bf16_f32((const libxsmm_bfloat16*)in+16*full_chunks, (float*)out+16*full_chunks, remainder); \
+  } \
+} while(0)
 
 LIBXSMM_INLINE void my_init_buf(float* buf, size_t size, int initPos, int initOne)
 {
