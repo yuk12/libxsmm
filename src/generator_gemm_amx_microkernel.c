@@ -1143,7 +1143,7 @@ void libxsmm_generator_gemm_amx_microkernel( libxsmm_generated_code*            
 
   /* Pick the proper tile compute instruction  */
   if (LIBXSMM_GEMM_PRECISION_BF16 == LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype )) {
-    tile_compute_instr = LIBXSMM_X86_INSTR_TDPBF16PS;
+    tile_compute_instr = LIBXSMM_X86_INSTR_TDPBUUD;
   } else if (LIBXSMM_GEMM_PRECISION_I8 == LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype )) {
     if ( ((i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_A_UNSIGNED) > 0) && ((i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_B_UNSIGNED) > 0) ) {
       tile_compute_instr = LIBXSMM_X86_INSTR_TDPBUUD;
