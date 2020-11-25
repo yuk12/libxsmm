@@ -233,6 +233,7 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
   } else {
     use_cldemote = atoi(env_use_cldemote);
   }
+  use_cldemote = 0;
 
   /* Check if we have to save the tmp registers  */
   if ( (gp_reg_gemm_scratch == i_gp_reg_mapping->gp_reg_help_1) && (i_micro_kernel_config->n_loop_exists == 1)  ) {
@@ -344,7 +345,7 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
 
       libxsmm_x86_instruction_vec_move( io_generated_code,
           i_micro_kernel_config->instruction_set,
-          LIBXSMM_X86_INSTR_VMOVUPS,
+          LIBXSMM_X86_INSTR_VMOVNTPS,
           i_gp_reg_mapping->gp_reg_c,
           LIBXSMM_X86_GP_REG_UNDEF, 0,
           ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2),
@@ -443,7 +444,7 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
       if (overwrite_C == 0) {
         libxsmm_x86_instruction_vec_move( io_generated_code,
             i_micro_kernel_config->instruction_set,
-            LIBXSMM_X86_INSTR_VMOVUPS,
+            LIBXSMM_X86_INSTR_VMOVNTPS,
             i_gp_reg_mapping->gp_reg_c,
             LIBXSMM_X86_GP_REG_UNDEF, 0,
             ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2),
@@ -528,7 +529,7 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
       char vname = (char)((tile1 >= 0) ? i_micro_kernel_config->vector_name : 'y');
       libxsmm_x86_instruction_vec_move( io_generated_code,
           i_micro_kernel_config->instruction_set,
-          LIBXSMM_X86_INSTR_VMOVUPS,
+          LIBXSMM_X86_INSTR_VMOVNTPS,
           gp_reg_C,
           LIBXSMM_X86_GP_REG_UNDEF, 0,
           ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2),
@@ -586,7 +587,7 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
 
         libxsmm_x86_instruction_vec_move( io_generated_code,
             i_micro_kernel_config->instruction_set,
-            LIBXSMM_X86_INSTR_VMOVUPS,
+            LIBXSMM_X86_INSTR_VMOVNTPS,
             gp_vnni_out_ext_buf,
             LIBXSMM_X86_GP_REG_UNDEF, 0,
             (((in_offset/2+col/2)) * i_xgemm_desc->ldc  + im_offset + 16) * 2 * (i_micro_kernel_config->datatype_size/2),
@@ -615,7 +616,7 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
 
       libxsmm_x86_instruction_vec_move( io_generated_code,
           i_micro_kernel_config->instruction_set,
-          LIBXSMM_X86_INSTR_VMOVUPS,
+          LIBXSMM_X86_INSTR_VMOVNTPS,
           gp_reg_C,
           LIBXSMM_X86_GP_REG_UNDEF, 0,
           ((in_offset+col) * i_xgemm_desc->ldc + im_offset) * (i_micro_kernel_config->datatype_size/2),
@@ -655,7 +656,7 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
 
           libxsmm_x86_instruction_vec_move( io_generated_code,
               i_micro_kernel_config->instruction_set,
-              LIBXSMM_X86_INSTR_VMOVUPS,
+              LIBXSMM_X86_INSTR_VMOVNTPS,
               gp_vnni_out_ext_buf,
               LIBXSMM_X86_GP_REG_UNDEF, 0,
               (((in_offset/2+col/2)) * i_xgemm_desc->ldc + im_offset) * 2 * (i_micro_kernel_config->datatype_size/2),
@@ -680,7 +681,7 @@ void paired_tilestore( libxsmm_generated_code*            io_generated_code,
 
           libxsmm_x86_instruction_vec_move( io_generated_code,
               i_micro_kernel_config->instruction_set,
-              LIBXSMM_X86_INSTR_VMOVUPS,
+              LIBXSMM_X86_INSTR_VMOVNTPS,
               gp_vnni_out_ext_buf,
               LIBXSMM_X86_GP_REG_UNDEF, 0,
               (((in_offset/2+col/2)) * i_xgemm_desc->ldc  + im_offset + 16) * 2 * (i_micro_kernel_config->datatype_size/2),
