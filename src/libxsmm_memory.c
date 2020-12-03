@@ -13,6 +13,14 @@
 #include "libxsmm_diff.h"
 #include "libxsmm_main.h"
 
+#if defined(LIBXSMM_OFFLOAD_TARGET)
+# pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
+#endif
+#include <ctype.h>
+#if defined(LIBXSMM_OFFLOAD_TARGET)
+# pragma offload_attribute(pop)
+#endif
+
 #if !defined(LIBXSMM_MEMORY_STDLIB) && 0
 # define LIBXSMM_MEMORY_STDLIB
 #endif
@@ -231,6 +239,30 @@ LIBXSMM_API_INTERN void libxsmm_memory_finalize(void)
 }
 
 
+LIBXSMM_API unsigned char libxsmm_diff_4(const void* a, const void* b, ...)
+{
+#if defined(LIBXSMM_MEMORY_SW)
+  return internal_diff_sw(a, b, 4);
+#else
+  LIBXSMM_DIFF_4_DECL(a4);
+  LIBXSMM_DIFF_4_LOAD(a4, a);
+  return LIBXSMM_DIFF_4(a4, b, 0/*dummy*/);
+#endif
+}
+
+
+LIBXSMM_API unsigned char libxsmm_diff_8(const void* a, const void* b, ...)
+{
+#if defined(LIBXSMM_MEMORY_SW)
+  return internal_diff_sw(a, b, 8);
+#else
+  LIBXSMM_DIFF_8_DECL(a8);
+  LIBXSMM_DIFF_8_LOAD(a8, a);
+  return LIBXSMM_DIFF_8(a8, b, 0/*dummy*/);
+#endif
+}
+
+
 LIBXSMM_API unsigned char libxsmm_diff_16(const void* a, const void* b, ...)
 {
 #if defined(LIBXSMM_MEMORY_SW)
@@ -340,6 +372,16 @@ LIBXSMM_API unsigned int libxsmm_diff_n(const void* a, const void* bn, unsigned 
       LIBXSMM_DIFF_16_LOAD(a16, a);
       LIBXSMM_DIFF_N(unsigned int, result, LIBXSMM_DIFF_16, a16, bn, size, stride, hint, n);
     } break;
+    case 8: {
+      LIBXSMM_DIFF_8_DECL(a8);
+      LIBXSMM_DIFF_8_LOAD(a8, a);
+      LIBXSMM_DIFF_N(unsigned int, result, LIBXSMM_DIFF_8, a8, bn, size, stride, hint, n);
+    } break;
+    case 4: {
+      LIBXSMM_DIFF_4_DECL(a4);
+      LIBXSMM_DIFF_4_LOAD(a4, a);
+      LIBXSMM_DIFF_N(unsigned int, result, LIBXSMM_DIFF_4, a4, bn, size, stride, hint, n);
+    } break;
     default:
 # endif
     {
@@ -416,6 +458,31 @@ LIBXSMM_API unsigned long long libxsmm_hash_string(const char* string)
 }
 
 
+LIBXSMM_API const char* libxsmm_stristr(const char* a, const char* b)
+{
+  const char* result = NULL;
+  if (NULL != a && NULL != b && '\0' != *a && '\0' != *b) {
+    do {
+      if (tolower(*a) != tolower(*b)) {
+        ++a;
+      }
+      else {
+        const char* c = b;
+        result = a;
+        while ('\0' != *++a && '\0' != *++c) {
+          if (tolower(*a) != tolower(*c)) {
+            result = NULL;
+            break;
+          }
+        }
+        if ('\0' == *c) break;
+      }
+    } while ('\0' != *a);
+  }
+  return result;
+}
+
+
 LIBXSMM_API int libxsmm_aligned(const void* ptr, const size_t* inc, int* alignment)
 {
   const int minalign = 4 * libxsmm_cpuid_vlen32(libxsmm_target_archid);
@@ -426,10 +493,11 @@ LIBXSMM_API int libxsmm_aligned(const void* ptr, const size_t* inc, int* alignme
     ptr_is_aligned = !LIBXSMM_MOD2(address, (uintptr_t)minalign);
   }
   else {
-    *alignment = (1 << LIBXSMM_INTRINSICS_BITSCANFWD64(address));
+    const unsigned int nbits = LIBXSMM_INTRINSICS_BITSCANFWD64(address);
+    *alignment = (32 > nbits ? (1 << nbits) : INT_MAX);
     ptr_is_aligned = (minalign <= *alignment);
   }
-  return ptr_is_aligned && (NULL == inc || !LIBXSMM_MOD2(*inc, minalign));
+  return ptr_is_aligned && (NULL == inc || !LIBXSMM_MOD2(*inc, (size_t)minalign));
 }
 
 

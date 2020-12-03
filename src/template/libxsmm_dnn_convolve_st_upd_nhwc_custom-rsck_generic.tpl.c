@@ -47,6 +47,16 @@ const element_output_type *A_ptrs[1024];
 const element_input_type  *B_ptrs[1024];
 unsigned long long n_blocks;
 
+int brgemm_pf_oob = 0;
+const char *const env_brgemm_pf_oob = getenv("BRGEMM_PF_OOB");
+if ( 0 == env_brgemm_pf_oob ) {
+} else {
+  brgemm_pf_oob = atoi(env_brgemm_pf_oob);
+}
+if (brgemm_pf_oob > 0) {
+  prefetch_mode = prefetch_mode | libxsmm_get_gemm_prefetch(LIBXSMM_GEMM_PREFETCH_BRGEMM_OOB);
+}
+
 libxsmm_barrier_init(handle->barrier, ltid);
 
 /* physical pad input */
@@ -420,7 +430,7 @@ if (handle->upd_use_batchreduce == 0 && handle->upd_linearized_tasklist == 0) {
       int S = handle->desc.S;
       const int IFH = (handle->upd_pack_input == 1) ? handle->ifhp/handle->desc.u : IFHP;
       const int IFW = (handle->upd_pack_input == 1) ? handle->ifwp/handle->desc.v : IFWP;
-      element_input_type *input_ptr_base = (handle->upd_pack_input == 1) ? (element_input_type*)((char*)handle->scratch + handle->upd_packing_padding_scratch_offset) : (element_input_type*)handle->reg_input->data;
+      element_input_type *input_ptr_base = (handle->upd_pack_input == 1) ? (element_input_type*)((char*)handle->scratch + handle->upd_packing_padding_scratch_offset) : (element_input_type*)input_ptr_to_use;
       LIBXSMM_VLA_DECL(5, element_input_type, input_use, (element_input_type*)input_ptr_base, IFH, IFW, handle->blocksifm, handle->ifmblock);
 
       /* If requested, pack input to avoid strided accesses */

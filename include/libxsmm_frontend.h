@@ -57,6 +57,16 @@
 #   include <mkl.h>
 # endif
 #endif
+/** INTEL_MKL_VERSION is needed later to fix some NOTHROW issue. */
+#if defined(__MKL) && !defined(INTEL_MKL_VERSION) && defined(NOTHROW)
+# if defined(LIBXSMM_OFFLOAD_BUILD)
+#   pragma offload_attribute(push,target(LIBXSMM_OFFLOAD_TARGET))
+#   include <mkl_version.h>
+#   pragma offload_attribute(pop)
+# else
+#   include <mkl_version.h>
+# endif
+#endif
 
 /** Automatically select a prefetch-strategy (libxsmm_get_gemm_xprefetch, etc.). */
 #define LIBXSMM_PREFETCH_AUTO -1
@@ -426,15 +436,17 @@
 #define LIBXSMM_MATINIT_AUX(OMP, TYPE, SEED, DST, NROWS, NCOLS, LD, SCALE) { \
   /*const*/ double libxsmm_matinit_seed_ = (double)SEED; /* avoid constant conditional */ \
   const double libxsmm_matinit_scale_ = (SCALE) * libxsmm_matinit_seed_ + (SCALE); \
+  const libxsmm_blasint libxsmm_matinit_nrows_ = (libxsmm_blasint)NROWS; \
   const libxsmm_blasint libxsmm_matinit_ld_ = (libxsmm_blasint)LD; \
   libxsmm_blasint libxsmm_matinit_i_ = 0, libxsmm_matinit_j_; \
   LIBXSMM_OMP_VAR(libxsmm_matinit_i_); LIBXSMM_OMP_VAR(libxsmm_matinit_j_); \
   if (0 != libxsmm_matinit_seed_) { \
     OMP(parallel for private(libxsmm_matinit_i_, libxsmm_matinit_j_)) \
     for (libxsmm_matinit_i_ = 0; libxsmm_matinit_i_ < ((libxsmm_blasint)NCOLS); ++libxsmm_matinit_i_) { \
-      for (libxsmm_matinit_j_ = 0; libxsmm_matinit_j_ < ((libxsmm_blasint)NROWS); ++libxsmm_matinit_j_) { \
+      for (libxsmm_matinit_j_ = 0; libxsmm_matinit_j_ < libxsmm_matinit_nrows_; ++libxsmm_matinit_j_) { \
         const libxsmm_blasint libxsmm_matinit_k_ = libxsmm_matinit_i_ * libxsmm_matinit_ld_ + libxsmm_matinit_j_; \
-        (DST)[libxsmm_matinit_k_] = (TYPE)(libxsmm_matinit_scale_ / (1.0 + libxsmm_matinit_k_)); \
+        (DST)[libxsmm_matinit_k_] = (TYPE)(libxsmm_matinit_scale_ * (1.0 + \
+          libxsmm_matinit_i_ * libxsmm_matinit_nrows_ + libxsmm_matinit_j_)); \
       } \
       for (; libxsmm_matinit_j_ < libxsmm_matinit_ld_; ++libxsmm_matinit_j_) { \
         const libxsmm_blasint libxsmm_matinit_k_ = libxsmm_matinit_i_ * libxsmm_matinit_ld_ + libxsmm_matinit_j_; \

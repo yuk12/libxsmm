@@ -46,154 +46,354 @@
 /* special instruction */
 #define LIBXSMM_X86_INSTR_UNDEF           9999
 
-/* Load/Store/Move instructions */
-/* AVX1,AVX2,AVX512 */
-#define LIBXSMM_X86_INSTR_VMOVAPD        10000
-#define LIBXSMM_X86_INSTR_VMOVUPD        10001
-#define LIBXSMM_X86_INSTR_VMOVAPS        10002
-#define LIBXSMM_X86_INSTR_VMOVUPS        10003
-#define LIBXSMM_X86_INSTR_VBROADCASTSD   10004
-#define LIBXSMM_X86_INSTR_VBROADCASTSS   10005
-#define LIBXSMM_X86_INSTR_VMOVDDUP       10006
-#define LIBXSMM_X86_INSTR_VMOVSD         10007
-#define LIBXSMM_X86_INSTR_VMOVSS         10008
-#define LIBXSMM_X86_INSTR_VPBROADCASTB   10025
-#define LIBXSMM_X86_INSTR_VPBROADCASTW   10026
-#define LIBXSMM_X86_INSTR_VPBROADCASTD   10027
-#define LIBXSMM_X86_INSTR_VPBROADCASTQ   10028
-#define LIBXSMM_X86_INSTR_VMOVDQA32      10029
-#define LIBXSMM_X86_INSTR_VMOVDQA64      10030
-#define LIBXSMM_X86_INSTR_VMOVDQU8       10031
-#define LIBXSMM_X86_INSTR_VMOVDQU16      10032
-#define LIBXSMM_X86_INSTR_VMOVDQU32      10033
-#define LIBXSMM_X86_INSTR_VMOVDQU64      10034
-#define LIBXSMM_X86_INSTR_VMASKMOVPD     10035
-#define LIBXSMM_X86_INSTR_VMASKMOVPS     10036
-#define LIBXSMM_X86_INSTR_VMOVNTPD       10037
-#define LIBXSMM_X86_INSTR_VMOVNTPS       10038
-#define LIBXSMM_X86_INSTR_VMOVNTDQ       10039
-
-/* SSE */
-#define LIBXSMM_X86_INSTR_MOVAPD         10009
-#define LIBXSMM_X86_INSTR_MOVUPD         10010
-#define LIBXSMM_X86_INSTR_MOVAPS         10011
-#define LIBXSMM_X86_INSTR_MOVUPS         10012
-#define LIBXSMM_X86_INSTR_MOVSD          10013
-#define LIBXSMM_X86_INSTR_MOVSS          10014
-#define LIBXSMM_X86_INSTR_MOVDDUP        10015
-#define LIBXSMM_X86_INSTR_SHUFPS         10016
-#define LIBXSMM_X86_INSTR_SHUFPD         10017
-
-/* Gather/Scatter instructions */
-#define LIBXSMM_X86_INSTR_VGATHERDPS     11000
-#define LIBXSMM_X86_INSTR_VGATHERDPD     11001
-#define LIBXSMM_X86_INSTR_VGATHERQPS     11002
-#define LIBXSMM_X86_INSTR_VGATHERQPD     11003
-#define LIBXSMM_X86_INSTR_VSCATTERDPS    11004
-#define LIBXSMM_X86_INSTR_VSCATTERDPD    11005
-#define LIBXSMM_X86_INSTR_VSCATTERQPS    11006
-#define LIBXSMM_X86_INSTR_VSCATTERQPD    11007
-
-/* Shuffle/Permute/Blend instructions */
-#define LIBXSMM_X86_INSTR_VSHUFPS       0x010426c6 /* EVEX.512.0F.W0 C6 /r ib */
-#define LIBXSMM_X86_INSTR_VPERM2F128     12001
-#define LIBXSMM_X86_INSTR_VSHUFF64X2     12002
-#define LIBXSMM_X86_INSTR_VEXTRACTF32X8  12003
-#define LIBXSMM_X86_INSTR_VEXTRACTF64X4  12004
-#define LIBXSMM_X86_INSTR_VSHUFPD       0x018536c6
-#define LIBXSMM_X86_INSTR_VSHUFF32X4     12006
-#define LIBXSMM_X86_INSTR_VSHUFI32X4     12007
-#define LIBXSMM_X86_INSTR_VSHUFI64X2     12008
-
-/* Vector compute instructions */
-/* AVX1,AVX2,AVX512 */
-
-/* highest byte "MM":
- *   0x01 : "0F"
- *   0x02 : "0F38"
- *   0x03 : "0F3A"
- * second highest byte, W (highest 4 bit), P[10]=1 (third bit), pp (lower 2 bits):
- *   0x05 : W0, 66
- *   0x06 : W0, F3
- *   0x07 : W0, F2
- *   0x85 : W1, 66
- *   0x86 : W1, F3
- *   0x87 : W1, F2
- * third highest byte has 2 4-bit parts. x36 is 3 and 6. This corresponds to the powers of 2 for broadcast and non-broadcast. So 3 and 6 yields 8 and 64, which is the most common case- do 64 at a time w/o broadcast or 8 at a time
+/*
+ * 4-byte Integer Instruction Header definition map:
+ * 4th byte:
+ * ---------
+ * 31 encoding mode (11=EVEX only, 10=REX, 01=VEX, 00=VEX/EVEX Hybrid)
+ * 30 encoding mode (11=EVEX only, 10=REX, 01=VEX, 00=VEX/EVEX Hybrid)
+ * 29 #operands (2 bits=0-3)
+ * 28 #operands (2 bits=0-3)
+ * 27 Reversal load/store ordering. 0=regular, 1=reverse (open question: is one bit enough, or do I need a couple bits to show other orderings)
+ * 26 Op code extension in ModRM Regfiles (extennsion is bits 20-22)
+ * 25 unused - Gather instruction???
+ * 24 unused - free
+ * 3rd byte:
+ * ---------
+ * 23 W bit (single inputs=0 or double inputs=1)
+ * 22 Op code extension shifts in Reg field in ModRM (Shifts like /2, /4, /7, etc.. Maps to values 0-7, corresponding to /0 to /7.)
+ * 21 Op code extension shifts in Reg field in ModRM (Shifts like /2, /4, /7, etc.. Maps to values 0-7, corresponding to /0 to /7.)
+ * 20 Op code extension shifts in Reg field in ModRM (Shifts like /2, /4, /7, etc.. Maps to values 0-7, corresponding to /0 to /7.)
+ * 19 Immediate required by the instruction. 0=no, 1=yes.
+ * 18 Reserved, must be 1 for now
+ * 17 P (compressed prefix 2-bits and 4 values: None=0x4, 66=0x5, F3=0x6, F2=0x7 , values include the reserved bit)
+ * 16 P (compressed prefix 2-bits and 4 values: None=0x4, 66=0x5, F3=0x6, F2=0x7 , values include the reserved bit)
+ * 2nd byte:
+ * ---------
+ * 15 Reserved, must be 0 for now
+ * 14 Reserved, must be 0 for now
+ * 13 M (Map bit, 0F=0x1, 0F38=0x2, 0F3A=0x3)
+ * 12 M (Map bit, 0F-0x1, 0F38=0x2, 0F3A=0x3)
+ * 11 Disp8: N value constant for VL=128/256/512, 1=yes, 0=no (fullmem)
+ * 10 Disp8: exp of width (0-6 values mapped to 1 to 64, 7 currently unused)
+ * 9  Disp8: exp of width (0-6 values mapped to 1 to 64, 7 currently unused)
+ * 8  Disp8: exp of width (0-6 values mapped to 1 to 64, 7 currently unused)
+ * 1st byte:
+ * ---------
+ * 7 - Op code byte
+ * 6 - Op code byte
+ * 5 - Op code byte
+ * 4 - Op code byte
+ * 3 - Op code byte
+ * 2 - Op code byte
+ * 1 - Op code byte
+ * 0 - Op code byte
  */
 
-#define LIBXSMM_X86_INSTR_VFMADD132PS  0x02052698  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMADD132PD  0x02853698  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMADD213PS  0x020526a8  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMADD213PD  0x028536a8  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMADD231PS  0x020526b8  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMADD231PD  0x028536b8  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMSUB132PS  0x0205269a  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMSUB132PD  0x0285369a  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMSUB213PS  0x020526aa  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMSUB213PD  0x028536aa  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMSUB231PS  0x020526ba  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFMSUB231PD  0x028536ba  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMADD132PS 0x0205269c  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMADD132PD 0x0285369c  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMADD213PS 0x020526ac  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMADD213PD 0x028536ac  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMADD231PS 0x020526bc  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMADD231PD 0x028536bc  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMSUB132PS 0x0205269e  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMSUB132PD 0x0285369e  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMSUB213PS 0x020526ae  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMSUB213PD 0x028536ae  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMSUB231PS 0x020526be  /* 0F38 - W0/66 - B8 */
-#define LIBXSMM_X86_INSTR_VFNMSUB231PD 0x028536be  /* 0F38 - W1/66 - B8 */
-#define LIBXSMM_X86_INSTR_VPERMW       0x0285268d  /* 0F38 - W1/66 - 8D */
-#define LIBXSMM_X86_INSTR_VFMADD132SD  0x02853399
-#define LIBXSMM_X86_INSTR_VFMADD213SD  0x028533a9
-#define LIBXSMM_X86_INSTR_VFMADD231SD  0x028533b9
-#define LIBXSMM_X86_INSTR_VFMADD132SS  0x02052299  /* EVEX.LIG.66.0F38.W0 99 */
-#define LIBXSMM_X86_INSTR_VFMADD213SS  0x020522a9
-#define LIBXSMM_X86_INSTR_VFMADD231SS  0x020522b9
-#define LIBXSMM_X86_INSTR_VFMSUB132SD  0x0285339b
-#define LIBXSMM_X86_INSTR_VFMSUB213SD  0x028533ab
-#define LIBXSMM_X86_INSTR_VFMSUB231SD  0x028533bb
-#define LIBXSMM_X86_INSTR_VFMSUB132SS  0x0205229b
-#define LIBXSMM_X86_INSTR_VFMSUB213SS  0x020522ab
-#define LIBXSMM_X86_INSTR_VFMSUB231SS  0x020522bb
-#define LIBXSMM_X86_INSTR_VFNMADD132SD 0x0285339d
-#define LIBXSMM_X86_INSTR_VFNMADD213SD 0x028533ad
-#define LIBXSMM_X86_INSTR_VFNMADD231SD 0x028533bd
-#define LIBXSMM_X86_INSTR_VFNMADD132SS 0x0205229d
-#define LIBXSMM_X86_INSTR_VFNMADD213SS 0x020522ad
-#define LIBXSMM_X86_INSTR_VFNMADD231SS 0x020522bd
-#define LIBXSMM_X86_INSTR_VFNMSUB132SD 0x0285339f
-#define LIBXSMM_X86_INSTR_VFNMSUB213SD 0x028533af
-#define LIBXSMM_X86_INSTR_VFNMSUB231SD 0x028533bf
-#define LIBXSMM_X86_INSTR_VFNMSUB132SS 0x0205229f
-#define LIBXSMM_X86_INSTR_VFNMSUB213SS 0x020522af
-#define LIBXSMM_X86_INSTR_VFNMSUB231SS 0x020522bf
+/* Load/Store/Move instructions -  AVX1,AVX2,AVX512 - deprecated values */
+#define LIBXSMM_X86_INSTR_VMOVAPD          0x20851628
+#define LIBXSMM_X86_INSTR_VMOVUPD          0x20851610
+#define LIBXSMM_X86_INSTR_VMOVAPS          0x20041628
+#define LIBXSMM_X86_INSTR_VMOVUPS          0x20041610
+#define LIBXSMM_X86_INSTR_VMOVSD           0x20871510
+#define LIBXSMM_X86_INSTR_VMOVSS           0x20061410
+#define LIBXSMM_X86_INSTR_VMASKMOVPD       0x7005252d
+#define LIBXSMM_X86_INSTR_VMASKMOVPS       0x7005252c
+#define LIBXSMM_X86_INSTR_VMOVDQA32        0xe005166f
+#define LIBXSMM_X86_INSTR_VMOVDQA64        0xe085166f
+#define LIBXSMM_X86_INSTR_VMOVDQU8         0xe007166f
+#define LIBXSMM_X86_INSTR_VMOVDQU16        0xe087166f
+#define LIBXSMM_X86_INSTR_VMOVDQU32        0xe006166f
+#define LIBXSMM_X86_INSTR_VMOVDQU64        0xe086166f
+/* Load instructions -  AVX,AVX2,AVX512 */
+#define LIBXSMM_X86_INSTR_VMOVDDUP         0x20871612
+#define LIBXSMM_X86_INSTR_VBROADCASTSD     0x20852b19
+#define LIBXSMM_X86_INSTR_VBROADCASTSD_VEX 0x60052b19
+#define LIBXSMM_X86_INSTR_VBROADCASTSS     0x20052a18
+#define LIBXSMM_X86_INSTR_VPBROADCASTB     0xe0052878
+#define LIBXSMM_X86_INSTR_VPBROADCASTW     0xe0052979
+#define LIBXSMM_X86_INSTR_VPBROADCASTD     0xe0052a58
+#define LIBXSMM_X86_INSTR_VPBROADCASTQ     0xe0852b59
+#define LIBXSMM_X86_INSTR_VMOVAPD_LD       0x20851628
+#define LIBXSMM_X86_INSTR_VMOVUPD_LD       0x20851610
+#define LIBXSMM_X86_INSTR_VMOVAPS_LD       0x20041628
+#define LIBXSMM_X86_INSTR_VMOVUPS_LD       0x20041610
+#define LIBXSMM_X86_INSTR_VMOVSD_LD        0x20871510
+#define LIBXSMM_X86_INSTR_VMOVSS_LD        0x20061410
+#define LIBXSMM_X86_INSTR_VMASKMOVPD_LD    0x7005252d
+#define LIBXSMM_X86_INSTR_VMASKMOVPS_LD    0x7005252c
+#define LIBXSMM_X86_INSTR_VMOVDQA32_LD     0xe005166f
+#define LIBXSMM_X86_INSTR_VMOVDQA64_LD     0xe085166f
+#define LIBXSMM_X86_INSTR_VMOVDQU8_LD      0xe007166f
+#define LIBXSMM_X86_INSTR_VMOVDQU16_LD     0xe087166f
+#define LIBXSMM_X86_INSTR_VMOVDQU32_LD     0xe006166f
+#define LIBXSMM_X86_INSTR_VMOVDQU64_LD     0xe086166f
+#define LIBXSMM_X86_INSTR_VBROADCASTI64X2  0xe085245a
+#define LIBXSMM_X86_INSTR_VBROADCASTI64X4  0xe085255b
+/* Store instructions - AVX,AVX2,AVX512 */
+#define LIBXSMM_X86_INSTR_VMOVNTPD         0x2085162b
+#define LIBXSMM_X86_INSTR_VMOVNTPS         0x2004162b
+#define LIBXSMM_X86_INSTR_VMOVNTDQ         0x200516e7
+#define LIBXSMM_X86_INSTR_VMOVAPD_ST       0x20851629
+#define LIBXSMM_X86_INSTR_VMOVUPD_ST       0x20851611
+#define LIBXSMM_X86_INSTR_VMOVAPS_ST       0x20041629
+#define LIBXSMM_X86_INSTR_VMOVUPS_ST       0x20041611
+#define LIBXSMM_X86_INSTR_VMOVSD_ST        0x20871511
+#define LIBXSMM_X86_INSTR_VMOVSS_ST        0x20061411
+#define LIBXSMM_X86_INSTR_VMASKMOVPD_ST    0x7005252f
+#define LIBXSMM_X86_INSTR_VMASKMOVPS_ST    0x7005252e
+#define LIBXSMM_X86_INSTR_VMOVDQA32_ST     0xe005167f
+#define LIBXSMM_X86_INSTR_VMOVDQA64_ST     0xe085167f
+#define LIBXSMM_X86_INSTR_VMOVDQU8_ST      0xe007167f
+#define LIBXSMM_X86_INSTR_VMOVDQU16_ST     0xe087167f
+#define LIBXSMM_X86_INSTR_VMOVDQU32_ST     0xe006167f
+#define LIBXSMM_X86_INSTR_VMOVDQU64_ST     0xe086167f
 
-/* 3arg op codes with imm8 */
-#define LIBXSMM_X86_INSTR_VRANGEPS    0x03053650  /* EVEX.NDS.512.66.0F3A.W0 50 /r ib: 0F3A - W0/66 - 50 */
-/* 2arg op codes */
-#define LIBXSMM_X86_INSTR_VRCP14PS    0x0a05264c  /* 0F38 - W1/66 - 4C */
-/* 2arg op codes with imm8 */
-#define LIBXSMM_X86_INSTR_VRNDSCALEPS 0x03053608  /* 0F3A - W0/66 - 08 */
-
-#define LIBXSMM_X86_INSTR_VXORPD      0x01853657  /* EVEX.512.66.0F.W1 57 */
-#define LIBXSMM_X86_INSTR_VADDPD      0x01853658
-#define LIBXSMM_X86_INSTR_VMULPD      0x01853659  /* EVEX.512.66.0F.W1 59 */
-#define LIBXSMM_X86_INSTR_VSUBPD      0x0185365c
-#define LIBXSMM_X86_INSTR_VADDSD      0x01873658
-#define LIBXSMM_X86_INSTR_VMULSD      0x01873659  /* EVEX.LIG.F2.0F.W1 59 */
-#define LIBXSMM_X86_INSTR_VSUBSD      0x0187365c
-#define LIBXSMM_X86_INSTR_VXORPS      0x01042657  /* EVEX.512.0F.W0 57 */
-#define LIBXSMM_X86_INSTR_VADDPS      0x01042658
-#define LIBXSMM_X86_INSTR_VMULPS      0x01042659
-#define LIBXSMM_X86_INSTR_VSUBPS      0x0104265c
-#define LIBXSMM_X86_INSTR_VMULSS      0x01062259  /* EVEX.LIG.F3.0F.W0 59 */
-#define LIBXSMM_X86_INSTR_VADDSS      0x01062258
-#define LIBXSMM_X86_INSTR_VSUBSS      0x0106225c
 /* SSE */
+#define LIBXSMM_X86_INSTR_MOVAPD           10009
+#define LIBXSMM_X86_INSTR_MOVUPD           10010
+#define LIBXSMM_X86_INSTR_MOVAPS           10011
+#define LIBXSMM_X86_INSTR_MOVUPS           10012
+#define LIBXSMM_X86_INSTR_MOVSD            10013
+#define LIBXSMM_X86_INSTR_MOVSS            10014
+#define LIBXSMM_X86_INSTR_MOVDDUP          10015
+#define LIBXSMM_X86_INSTR_SHUFPS           10016
+#define LIBXSMM_X86_INSTR_SHUFPD           10017
+
+/* Gather/Scatter instructions */
+#define LIBXSMM_X86_INSTR_VGATHERDPS       11000
+#define LIBXSMM_X86_INSTR_VGATHERDPD       11001
+#define LIBXSMM_X86_INSTR_VGATHERQPS       11002
+#define LIBXSMM_X86_INSTR_VGATHERQPD       11003
+#define LIBXSMM_X86_INSTR_VSCATTERDPS      11004
+#define LIBXSMM_X86_INSTR_VSCATTERDPD      11005
+#define LIBXSMM_X86_INSTR_VSCATTERQPS      11006
+#define LIBXSMM_X86_INSTR_VSCATTERQPD      11007
+
+/* Shuffle/Permute/Blend instructions */
+#define LIBXSMM_X86_INSTR_VSHUFPS          0x300c16c6
+#define LIBXSMM_X86_INSTR_VSHUFPD          0x308d16c6
+#define LIBXSMM_X86_INSTR_VPSHUFB          0x30052600
+#define LIBXSMM_X86_INSTR_VPSHUFD          0x200d1670
+#define LIBXSMM_X86_INSTR_VPSHUFHW         0x200e1670
+#define LIBXSMM_X86_INSTR_VPSHUFLW         0x200f1670
+#define LIBXSMM_X86_INSTR_VSHUFF32X4       0xf00d3623
+#define LIBXSMM_X86_INSTR_VSHUFF64X2       0xf08d3623
+#define LIBXSMM_X86_INSTR_VSHUFI32X4       0xf00d3643
+#define LIBXSMM_X86_INSTR_VSHUFI64X2       0xf08d3643
+#define LIBXSMM_X86_INSTR_VEXTRACTF128     0x680d3019
+#define LIBXSMM_X86_INSTR_VEXTRACTI128     0x680d3039
+#define LIBXSMM_X86_INSTR_VEXTRACTF32X4    0xe80d3c19
+#define LIBXSMM_X86_INSTR_VEXTRACTF64X2    0xe88d3c19
+#define LIBXSMM_X86_INSTR_VEXTRACTF32X8    0xe80d3d1b
+#define LIBXSMM_X86_INSTR_VEXTRACTF64X4    0xe88d3d1b
+#define LIBXSMM_X86_INSTR_VEXTRACTI32X4    0xe80d3c39
+#define LIBXSMM_X86_INSTR_VEXTRACTI64X2    0xe88d3c39
+#define LIBXSMM_X86_INSTR_VEXTRACTI32X8    0xe80d3d3b
+#define LIBXSMM_X86_INSTR_VEXTRACTI64X4    0xe88d3d3b
+#define LIBXSMM_X86_INSTR_VBLENDMPS        0xf0052665
+#define LIBXSMM_X86_INSTR_VBLENDMPD        0xf0852665
+#define LIBXSMM_X86_INSTR_VPBLENDMB        0xf0052666
+#define LIBXSMM_X86_INSTR_VPBLENDMW        0xf0852666
+#define LIBXSMM_X86_INSTR_VPBLENDMD        0xf0052664
+#define LIBXSMM_X86_INSTR_VPBLENDMQ        0xf0852664
+#define LIBXSMM_X86_INSTR_VEXPANDPD        0xe0852b88
+#define LIBXSMM_X86_INSTR_VEXPANDPS        0xe0052a88
+#define LIBXSMM_X86_INSTR_VPEXPANDQ        0xe0852b89
+#define LIBXSMM_X86_INSTR_VPEXPANDD        0xe0052a89
+#define LIBXSMM_X86_INSTR_VPEXPANDW        0xe0852962
+#define LIBXSMM_X86_INSTR_VPEXPANDB        0xe0052862
+#define LIBXSMM_X86_INSTR_VUNPCKLPD        0x30851614
+#define LIBXSMM_X86_INSTR_VUNPCKLPS        0x30041614
+#define LIBXSMM_X86_INSTR_VUNPCKHPD        0x30851615
+#define LIBXSMM_X86_INSTR_VUNPCKHPS        0x30041615
+#define LIBXSMM_X86_INSTR_VPUNPCKLWD       0x30051661
+#define LIBXSMM_X86_INSTR_VPUNPCKHWD       0x30051669
+#define LIBXSMM_X86_INSTR_VPUNPCKLDQ       0x30051662
+#define LIBXSMM_X86_INSTR_VPUNPCKHDQ       0x3005166a
+#define LIBXSMM_X86_INSTR_VPUNPCKLQDQ      0x3085166c
+#define LIBXSMM_X86_INSTR_VPUNPCKHQDQ      0x3085166d
+#define LIBXSMM_X86_INSTR_VPERM2F128       0x700d3006
+#define LIBXSMM_X86_INSTR_VPERM2I128       0x700d3046
+#define LIBXSMM_X86_INSTR_VPERMW           0x3085268d
+#define LIBXSMM_X86_INSTR_VPERMD           0x30052636
+#define LIBXSMM_X86_INSTR_VPERMQ_I         0x208d3e00
+#define LIBXSMM_X86_INSTR_VPERMT2B         0xf005267d
+#define LIBXSMM_X86_INSTR_VPERMT2W         0xf085267d
+#define LIBXSMM_X86_INSTR_VPERMT2D         0xf005267e
+#define LIBXSMM_X86_INSTR_VPERMT2Q         0xf085267e
+
+/* FMA instructions */
+#define LIBXSMM_X86_INSTR_VFMADD132PS      0x30052698
+#define LIBXSMM_X86_INSTR_VFMADD132PD      0x30852698
+#define LIBXSMM_X86_INSTR_VFMADD213PS      0x300526a8
+#define LIBXSMM_X86_INSTR_VFMADD213PD      0x308526a8
+#define LIBXSMM_X86_INSTR_VFMADD231PS      0x300526b8
+#define LIBXSMM_X86_INSTR_VFMADD231PD      0x308526b8
+#define LIBXSMM_X86_INSTR_VFMSUB132PS      0x3005269a
+#define LIBXSMM_X86_INSTR_VFMSUB132PD      0x3085269a
+#define LIBXSMM_X86_INSTR_VFMSUB213PS      0x300526aa
+#define LIBXSMM_X86_INSTR_VFMSUB213PD      0x308526aa
+#define LIBXSMM_X86_INSTR_VFMSUB231PS      0x300526ba
+#define LIBXSMM_X86_INSTR_VFMSUB231PD      0x308526ba
+#define LIBXSMM_X86_INSTR_VFNMADD132PS     0x3005269c
+#define LIBXSMM_X86_INSTR_VFNMADD132PD     0x3085269c
+#define LIBXSMM_X86_INSTR_VFNMADD213PS     0x300526ac
+#define LIBXSMM_X86_INSTR_VFNMADD213PD     0x308526ac
+#define LIBXSMM_X86_INSTR_VFNMADD231PS     0x300526bc
+#define LIBXSMM_X86_INSTR_VFNMADD231PD     0x308526bc
+#define LIBXSMM_X86_INSTR_VFNMSUB132PS     0x3005269e
+#define LIBXSMM_X86_INSTR_VFNMSUB132PD     0x3085269e
+#define LIBXSMM_X86_INSTR_VFNMSUB213PS     0x300526ae
+#define LIBXSMM_X86_INSTR_VFNMSUB213PD     0x308526ae
+#define LIBXSMM_X86_INSTR_VFNMSUB231PS     0x300526be
+#define LIBXSMM_X86_INSTR_VFNMSUB231PD     0x308526be
+#define LIBXSMM_X86_INSTR_VFMADD132SD      0x30852b99
+#define LIBXSMM_X86_INSTR_VFMADD213SD      0x30852ba9
+#define LIBXSMM_X86_INSTR_VFMADD231SD      0x30852bb9
+#define LIBXSMM_X86_INSTR_VFMADD132SS      0x30052a99
+#define LIBXSMM_X86_INSTR_VFMADD213SS      0x30052aa9
+#define LIBXSMM_X86_INSTR_VFMADD231SS      0x30052ab9
+#define LIBXSMM_X86_INSTR_VFMSUB132SD      0x30852b9b
+#define LIBXSMM_X86_INSTR_VFMSUB213SD      0x30852bab
+#define LIBXSMM_X86_INSTR_VFMSUB231SD      0x30852bbb
+#define LIBXSMM_X86_INSTR_VFMSUB132SS      0x30052a9b
+#define LIBXSMM_X86_INSTR_VFMSUB213SS      0x30052aab
+#define LIBXSMM_X86_INSTR_VFMSUB231SS      0x30052abb
+#define LIBXSMM_X86_INSTR_VFNMADD132SD     0x30852b9d
+#define LIBXSMM_X86_INSTR_VFNMADD213SD     0x30852bad
+#define LIBXSMM_X86_INSTR_VFNMADD231SD     0x30852bbd
+#define LIBXSMM_X86_INSTR_VFNMADD132SS     0x30052a9d
+#define LIBXSMM_X86_INSTR_VFNMADD213SS     0x30052aad
+#define LIBXSMM_X86_INSTR_VFNMADD231SS     0x30052abd
+#define LIBXSMM_X86_INSTR_VFNMSUB132SD     0x30852b9f
+#define LIBXSMM_X86_INSTR_VFNMSUB213SD     0x30852baf
+#define LIBXSMM_X86_INSTR_VFNMSUB231SD     0x30852bbf
+#define LIBXSMM_X86_INSTR_VFNMSUB132SS     0x30052a9f
+#define LIBXSMM_X86_INSTR_VFNMSUB213SS     0x30052aaf
+#define LIBXSMM_X86_INSTR_VFNMSUB231SS     0x30052abf
+
+/* floating pointer helpers */
+#define LIBXSMM_X86_INSTR_VRANGEPS         0xf00d3650
+#define LIBXSMM_X86_INSTR_VRANGEPD         0xf08d3650
+#define LIBXSMM_X86_INSTR_VRANGESS         0xf00d3a51
+#define LIBXSMM_X86_INSTR_VRANGESD         0xf08d3b51
+#define LIBXSMM_X86_INSTR_VREDUCEPS        0xe00d3656
+#define LIBXSMM_X86_INSTR_VREDUCEPD        0xe08d3656
+#define LIBXSMM_X86_INSTR_VREDUCESS        0xf00d3a57
+#define LIBXSMM_X86_INSTR_VREDUCESD        0xf08d3b57
+#define LIBXSMM_X86_INSTR_VRCP14PS         0xe005264c
+#define LIBXSMM_X86_INSTR_VRCP14PD         0xe085264c
+#define LIBXSMM_X86_INSTR_VRCP14SS         0xf0052a4d
+#define LIBXSMM_X86_INSTR_VRCP14SD         0xf0852b4d
+#define LIBXSMM_X86_INSTR_VRNDSCALEPS      0xe00d3608
+#define LIBXSMM_X86_INSTR_VRNDSCALEPD      0xe08d3609
+#define LIBXSMM_X86_INSTR_VRNDSCALESS      0xf00d3a0a
+#define LIBXSMM_X86_INSTR_VRNDSCALESD      0xf08d3b0b
+#define LIBXSMM_X86_INSTR_VRSQRT14PS       0xe005264e
+#define LIBXSMM_X86_INSTR_VRSQRT14PD       0xe085264e
+#define LIBXSMM_X86_INSTR_VRSQRT14SS       0xf0052a4f
+#define LIBXSMM_X86_INSTR_VRSQRT14SD       0xf0852b4f
+#define LIBXSMM_X86_INSTR_VSCALEFPS        0xf005262c
+#define LIBXSMM_X86_INSTR_VSCALEFPD        0xf085262c
+#define LIBXSMM_X86_INSTR_VSCALEFSS        0xf0052a2d
+#define LIBXSMM_X86_INSTR_VSCALEFSD        0xf0852b2d
+
+/* compare instructions */
+#define LIBXSMM_X86_INSTR_VCMPPS           0x300c16c2
+#define LIBXSMM_X86_INSTR_VCMPSS           0x300e1ac2
+#define LIBXSMM_X86_INSTR_VCMPPD           0x308d16c2
+#define LIBXSMM_X86_INSTR_VCMPSD           0x308f1bc2
+#define LIBXSMM_X86_INSTR_VPCMPB           0xf00d363f
+#define LIBXSMM_X86_INSTR_VPCMPUB          0xf00d363e
+#define LIBXSMM_X86_INSTR_VPCMPW           0xf08d363f
+#define LIBXSMM_X86_INSTR_VPCMPUW          0xf08d363e
+#define LIBXSMM_X86_INSTR_VPCMPD           0xf00d361f
+#define LIBXSMM_X86_INSTR_VPCMPUD          0xf00d361e
+#define LIBXSMM_X86_INSTR_VPCMPQ           0xf08d361f
+#define LIBXSMM_X86_INSTR_VPCMPUQ          0xf08d361e
+
+/* convert instructions */
+#define LIBXSMM_X86_INSTR_VCVTPS2PD        0x2004155a
+#define LIBXSMM_X86_INSTR_VCVTPH2PS        0x20052513
+#define LIBXSMM_X86_INSTR_VCVTPS2PH        0x280d351d
+#define LIBXSMM_X86_INSTR_VCVTDQ2PS        0x2004165b
+#define LIBXSMM_X86_INSTR_VCVTPS2DQ        0x2005165b
+#define LIBXSMM_X86_INSTR_VCVTPS2UDQ       0x20041679
+#define LIBXSMM_X86_INSTR_VPMOVDW          0x28062533
+#define LIBXSMM_X86_INSTR_VPMOVSXWD        0x20052523
+#define LIBXSMM_X86_INSTR_VPMOVDB          0x28062431
+#define LIBXSMM_X86_INSTR_VPMOVSDB         0x28062421
+#define LIBXSMM_X86_INSTR_VPMOVUSDB        0x28062411
+#define LIBXSMM_X86_INSTR_VPMOVZXWD        0x20052533
+#define LIBXSMM_X86_INSTR_VPMOVSXBD        0x20052421
+#define LIBXSMM_X86_INSTR_VPMOVZXBD        0x20052431
+#define LIBXSMM_X86_INSTR_VPMOVUSWB        0xe0062510
+#define LIBXSMM_X86_INSTR_VPMOVSWB         0xe0062520
+#define LIBXSMM_X86_INSTR_VPMOVWB          0xe0062530
+
+/* shift instructions */
+#define LIBXSMM_X86_INSTR_VPSLLD_I         0x246d1672
+#define LIBXSMM_X86_INSTR_VPSRAD_I         0x244d1672
+#define LIBXSMM_X86_INSTR_VPSRLD_I         0x242d1672
+#define LIBXSMM_X86_INSTR_VPSRAVD          0x30052646
+
+/* floating point compute */
+#define LIBXSMM_X86_INSTR_VXORPD           0x30851657
+#define LIBXSMM_X86_INSTR_VADDPD           0x30851658
+#define LIBXSMM_X86_INSTR_VMULPD           0x30851659
+#define LIBXSMM_X86_INSTR_VSUBPD           0x3085165c
+#define LIBXSMM_X86_INSTR_VDIVPD           0x3085165e
+#define LIBXSMM_X86_INSTR_VMAXPD           0x3085165f
+#define LIBXSMM_X86_INSTR_VADDSD           0x30871b58
+#define LIBXSMM_X86_INSTR_VMULSD           0x30871b59
+#define LIBXSMM_X86_INSTR_VSUBSD           0x30871b5c
+
+#define LIBXSMM_X86_INSTR_VXORPS           0x30041657
+#define LIBXSMM_X86_INSTR_VADDPS           0x30041658
+#define LIBXSMM_X86_INSTR_VMULPS           0x30041659
+#define LIBXSMM_X86_INSTR_VSUBPS           0x3004165c
+#define LIBXSMM_X86_INSTR_VDIVPS           0x3004165e
+#define LIBXSMM_X86_INSTR_VMAXPS           0x3004165f
+#define LIBXSMM_X86_INSTR_VMULSS           0x30061a59
+#define LIBXSMM_X86_INSTR_VADDSS           0x30061a58
+#define LIBXSMM_X86_INSTR_VSUBSS           0x30061a5c
+
+/* integer compute */
+#define LIBXSMM_X86_INSTR_VPXORD           0x300516ef
+#define LIBXSMM_X86_INSTR_VPORD            0x300516eb
+#define LIBXSMM_X86_INSTR_VPANDD           0x300516db
+#define LIBXSMM_X86_INSTR_VPANDQ           0x308516db
+#define LIBXSMM_X86_INSTR_VPADDQ           0x308516d4
+#define LIBXSMM_X86_INSTR_VPADDB           0x300516fc
+#define LIBXSMM_X86_INSTR_VPADDW           0x300516fd
+#define LIBXSMM_X86_INSTR_VPADDD           0x300516fe
+#define LIBXSMM_X86_INSTR_VPMADDWD         0x300516f5
+#define LIBXSMM_X86_INSTR_VPMADDUBSW       0x30052604
+#define LIBXSMM_X86_INSTR_VPADDSW          0x300516ed
+#define LIBXSMM_X86_INSTR_VPADDSB          0x300516ec
+#define LIBXSMM_X86_INSTR_VPSUBD           0x300516fa
+#define LIBXSMM_X86_INSTR_VPMAXSD          0x3005263d
+#define LIBXSMM_X86_INSTR_VPMINSD          0x30052639
+
+/* QUAD MADD, QUAD VNNI and VNNI */
+#define LIBXSMM_X86_INSTR_V4FMADDPS        0xf0072c9a
+#define LIBXSMM_X86_INSTR_V4FNMADDPS       0xf0072caa
+#define LIBXSMM_X86_INSTR_V4FMADDSS        0xf0072c9b
+#define LIBXSMM_X86_INSTR_V4FNMADDSS       0xf0072cab
+#define LIBXSMM_X86_INSTR_VP4DPWSSDS       0xf0072c53
+#define LIBXSMM_X86_INSTR_VP4DPWSSD        0xf0072c52
+#define LIBXSMM_X86_INSTR_VPDPBUSD         0x30052650
+#define LIBXSMM_X86_INSTR_VPDPBUSDS        0x30052651
+#define LIBXSMM_X86_INSTR_VPDPWSSD         0x30052652
+#define LIBXSMM_X86_INSTR_VPDPWSSDS        0x30052653
+
+/* AVX512 BF16 */
+#define LIBXSMM_X86_INSTR_VDPBF16PS        0xf0062652
+#define LIBXSMM_X86_INSTR_VCVTNEPS2BF16    0xe0062672
+#define LIBXSMM_X86_INSTR_VCVTNE2PS2BF16   0xf0072672
+
+/* SSE floating point compute */
 #define LIBXSMM_X86_INSTR_XORPD          20063
 #define LIBXSMM_X86_INSTR_MULPD          20064
 #define LIBXSMM_X86_INSTR_ADDPD          20065
@@ -208,80 +408,6 @@
 #define LIBXSMM_X86_INSTR_MULSS          20074
 #define LIBXSMM_X86_INSTR_ADDSS          20075
 #define LIBXSMM_X86_INSTR_SUBSS          20076
-/* AVX512F: Integer XOR as there is no FP */
-#define LIBXSMM_X86_INSTR_VPXORD         0x010526ef
-/* additional integer stuff */
-#define LIBXSMM_X86_INSTR_VPADDQ         0x018536d4
-#define LIBXSMM_X86_INSTR_VPADDB         0x010536fc
-#define LIBXSMM_X86_INSTR_VPADDW         0x010526fd
-#define LIBXSMM_X86_INSTR_VPADDD         0x010526fe
-#define LIBXSMM_X86_INSTR_VPMADDWD       0x010536f5
-#define LIBXSMM_X86_INSTR_VPMADDUBSW     0x02053604
-#define LIBXSMM_X86_INSTR_VPADDSW        0x010536ed
-#define LIBXSMM_X86_INSTR_VPADDSB        0x010536ec
-#define LIBXSMM_X86_INSTR_VPSUBD         0x010526fa
-/* Additional vector manipulations */
-#define LIBXSMM_X86_INSTR_VUNPCKLPD      0x01853614  /* EVEX.512.66.0F.W1 14 */
-#define LIBXSMM_X86_INSTR_VUNPCKLPS      0x01042614  /* EVEX.512.0F.W0 14 */
-#define LIBXSMM_X86_INSTR_VUNPCKHPD      0x01853615
-#define LIBXSMM_X86_INSTR_VUNPCKHPS      0x01042615
-#define LIBXSMM_X86_INSTR_VPSRAVD        0x02052646
-#define LIBXSMM_X86_INSTR_VCVTDQ2PS      0x0904265b
-#define LIBXSMM_X86_INSTR_VDIVPS         0x0104265e
-#define LIBXSMM_X86_INSTR_VDIVPD         0x0185365e
-#define LIBXSMM_X86_INSTR_VCVTPS2PD      0x0904255a
-#define LIBXSMM_X86_INSTR_VBLENDMPS      0x02052665
-#define LIBXSMM_X86_INSTR_VCMPPS         20097
-#define LIBXSMM_X86_INSTR_VPANDD         0x010526db
-#define LIBXSMM_X86_INSTR_VPANDQ         0x018536db
-#define LIBXSMM_X86_INSTR_VMAXPD         0x0185365f
-#define LIBXSMM_X86_INSTR_VMAXPS         0x0104265f
-#define LIBXSMM_X86_INSTR_VCVTPS2PH      20102
-#define LIBXSMM_X86_INSTR_VCVTPH2PS      0x0a053513
-#define LIBXSMM_X86_INSTR_VPERMD         0x02052636
-#define LIBXSMM_X86_INSTR_VPMOVDW        20105
-#define LIBXSMM_X86_INSTR_VPSRAD         20106 /* 0x09053672 EVEX.NDD.512.66.0F.W0 72 /4 /ib */
-#define LIBXSMM_X86_INSTR_VPSLLD         20107
-#define LIBXSMM_X86_INSTR_VPCMPB         20108
-#define LIBXSMM_X86_INSTR_VPCMPD         20109
-#define LIBXSMM_X86_INSTR_VPCMPW         20110
-#define LIBXSMM_X86_INSTR_VPCMPUB        20111
-#define LIBXSMM_X86_INSTR_VPCMPUD        20112
-#define LIBXSMM_X86_INSTR_VPCMPUW        20113
-#define LIBXSMM_X86_INSTR_VPORD          0x010526eb
-#define LIBXSMM_X86_INSTR_VPSRLD         20115
-#define LIBXSMM_X86_INSTR_VPERMT2W       0x0285367d
-#define LIBXSMM_X86_INSTR_VPMOVSXWD      20117
-#define LIBXSMM_X86_INSTR_VPMOVDB        20118
-#define LIBXSMM_X86_INSTR_VPMOVSDB       20119
-#define LIBXSMM_X86_INSTR_VPMOVUSDB      20120
-#define LIBXSMM_X86_INSTR_VCVTPS2DQ      0x0905265b
-#define LIBXSMM_X86_INSTR_VCVTPS2UDQ     0x09042679
-#define LIBXSMM_X86_INSTR_VPMOVZXWD      20123
-#define LIBXSMM_X86_INSTR_VPMOVSXBD      20124
-#define LIBXSMM_X86_INSTR_VPMOVZXBD      20125
-#define LIBXSMM_X86_INSTR_VPBLENDMB      0x02053666
-#define LIBXSMM_X86_INSTR_VPBLENDMW      0x02853666
-#define LIBXSMM_X86_INSTR_VPMAXSD        0x0205263d
-#define LIBXSMM_X86_INSTR_VPMINSD        0x02052639
-
-/* AVX512, QUAD MADD, QUAD VNNI and VNNI */
-#define LIBXSMM_X86_INSTR_V4FMADDPS      26000
-#define LIBXSMM_X86_INSTR_V4FNMADDPS     26001
-#define LIBXSMM_X86_INSTR_V4FMADDSS      26002
-#define LIBXSMM_X86_INSTR_V4FNMADDSS     26003
-#define LIBXSMM_X86_INSTR_VP4DPWSSD      26004
-#define LIBXSMM_X86_INSTR_VP4DPWSSDS     26005
-#define LIBXSMM_X86_INSTR_VPDPBUSD       0x02052650
-#define LIBXSMM_X86_INSTR_VPDPBUSDS      0x02052651
-#define LIBXSMM_X86_INSTR_VPDPWSSD       0x02052652
-#define LIBXSMM_X86_INSTR_VPDPWSSDS      0x02052653
-
-/* AVX512 BF16 */
-#define LIBXSMM_X86_INSTR_VDPBF16PS      0x02062652 /* EVEX.512.F3.0F38.W0 52 /r*/
-/* VCVTNEPS2BF16 is currently only defined in vec_compute_convert */
-#define LIBXSMM_X86_INSTR_VCVTNEPS2BF16  27001 /* 0x02062672 */ /* EVEX.512.F3.0F38.W0 72 /r*/
-#define LIBXSMM_X86_INSTR_VCVTNE2PS2BF16 0x02072672 /* EVEX.512.F2.0F38.W0 72 /r*/
 
 /* GP instructions */
 #define LIBXSMM_X86_INSTR_ADDQ           30000
@@ -299,21 +425,54 @@
 #define LIBXSMM_X86_INSTR_MOVSLQ         30012
 #define LIBXSMM_X86_INSTR_SALQ           30013
 #define LIBXSMM_X86_INSTR_IMUL           30014
-#define LIBXSMM_X86_INSTR_CMOVZ          30015
-#define LIBXSMM_X86_INSTR_CMOVNZ         30016
-#define LIBXSMM_X86_INSTR_JE             30017
-#define LIBXSMM_X86_INSTR_JZ             30018
-#define LIBXSMM_X86_INSTR_JG             30019
-#define LIBXSMM_X86_INSTR_JNE            30020
-#define LIBXSMM_X86_INSTR_JNZ            30021
-#define LIBXSMM_X86_INSTR_JGE            30022
-#define LIBXSMM_X86_INSTR_JLE            30023
-#define LIBXSMM_X86_INSTR_JMP            30024
-#define LIBXSMM_X86_INSTR_POPCNT         30025
-#define LIBXSMM_X86_INSTR_TZCNT          30026
-#define LIBXSMM_X86_INSTR_LEAQ           30027
-#define LIBXSMM_X86_INSTR_ANDQ           30028
-#define LIBXSMM_X86_INSTR_CLDEMOTE       30029
+#define LIBXSMM_X86_INSTR_JE             30015
+#define LIBXSMM_X86_INSTR_JZ             30016
+#define LIBXSMM_X86_INSTR_JG             30017
+#define LIBXSMM_X86_INSTR_JNE            30018
+#define LIBXSMM_X86_INSTR_JNZ            30019
+#define LIBXSMM_X86_INSTR_JGE            30020
+#define LIBXSMM_X86_INSTR_JLE            30021
+#define LIBXSMM_X86_INSTR_JMP            30022
+#define LIBXSMM_X86_INSTR_POPCNT         30023
+#define LIBXSMM_X86_INSTR_TZCNT          30024
+#define LIBXSMM_X86_INSTR_LEAQ           30025
+#define LIBXSMM_X86_INSTR_ANDQ           30026
+#define LIBXSMM_X86_INSTR_CLDEMOTE       30027
+#define LIBXSMM_X86_INSTR_SHLQ           30028
+#define LIBXSMM_X86_INSTR_SARQ           30029
+#define LIBXSMM_X86_INSTR_SHRQ           30030
+#define LIBXSMM_X86_INSTR_CLFLUSHOPT     30031
+#define LIBXSMM_X86_INSTR_CMOVA          30032
+#define LIBXSMM_X86_INSTR_CMOVAE         30033
+#define LIBXSMM_X86_INSTR_CMOVB          30034
+#define LIBXSMM_X86_INSTR_CMOVBE         30035
+#define LIBXSMM_X86_INSTR_CMOVC          30036
+#define LIBXSMM_X86_INSTR_CMOVE          30037
+#define LIBXSMM_X86_INSTR_CMOVG          30038
+#define LIBXSMM_X86_INSTR_CMOVGE         30039
+#define LIBXSMM_X86_INSTR_CMOVL          30040
+#define LIBXSMM_X86_INSTR_CMOVLE         30041
+#define LIBXSMM_X86_INSTR_CMOVNA         30042
+#define LIBXSMM_X86_INSTR_CMOVNAE        30043
+#define LIBXSMM_X86_INSTR_CMOVNB         30044
+#define LIBXSMM_X86_INSTR_CMOVNBE        30045
+#define LIBXSMM_X86_INSTR_CMOVNC         30046
+#define LIBXSMM_X86_INSTR_CMOVNE         30047
+#define LIBXSMM_X86_INSTR_CMOVNG         30048
+#define LIBXSMM_X86_INSTR_CMOVNGE        30049
+#define LIBXSMM_X86_INSTR_CMOVNL         30050
+#define LIBXSMM_X86_INSTR_CMOVNLE        30051
+#define LIBXSMM_X86_INSTR_CMOVNO         30052
+#define LIBXSMM_X86_INSTR_CMOVNP         30053
+#define LIBXSMM_X86_INSTR_CMOVNS         30054
+#define LIBXSMM_X86_INSTR_CMOVNZ         30055
+#define LIBXSMM_X86_INSTR_CMOVO          30056
+#define LIBXSMM_X86_INSTR_CMOVP          30057
+#define LIBXSMM_X86_INSTR_CMOVPE         30058
+#define LIBXSMM_X86_INSTR_CMOVPO         30059
+#define LIBXSMM_X86_INSTR_CMOVS          30060
+#define LIBXSMM_X86_INSTR_CMOVZ          30061
+
 
 /* Mask move instructions */
 #define LIBXSMM_X86_INSTR_KMOV           40000
@@ -330,17 +489,17 @@
 #define LIBXSMM_X86_INSTR_LDTILECFG          50001
 #define LIBXSMM_X86_INSTR_STTILECFG          50002
 #define LIBXSMM_X86_INSTR_TILERELEASE        50003
-#define LIBXSMM_X86_INSTR_TILELOADD          50004
-#define LIBXSMM_X86_INSTR_TILELOADDT1        50005
-#define LIBXSMM_X86_INSTR_TILESTORED         50006
-#define LIBXSMM_X86_INSTR_TILEZERO           50007
+#define LIBXSMM_X86_INSTR_TILELOADD          0x6007204b
+#define LIBXSMM_X86_INSTR_TILELOADDT1        0x6005204b
+#define LIBXSMM_X86_INSTR_TILESTORED         0x6006204b
+#define LIBXSMM_X86_INSTR_TILEZERO           0x50072049
 /* CPUID: AMX-INT8 INTERCEPT: SPR */
-#define LIBXSMM_X86_INSTR_TDPBSSD            50008
-#define LIBXSMM_X86_INSTR_TDPBSUD            50009
-#define LIBXSMM_X86_INSTR_TDPBUSD            50010
-#define LIBXSMM_X86_INSTR_TDPBUUD            50011
+#define LIBXSMM_X86_INSTR_TDPBSSD            0x7007205e
+#define LIBXSMM_X86_INSTR_TDPBSUD            0x7006205e
+#define LIBXSMM_X86_INSTR_TDPBUSD            0x7005205e
+#define LIBXSMM_X86_INSTR_TDPBUUD            0x7004205e
 /* CPUID: AMX-BF16 INTERCEPT: SPR */
-#define LIBXSMM_X86_INSTR_TDPBF16PS          50012
+#define LIBXSMM_X86_INSTR_TDPBF16PS          0x7006205c
 
 /* define error codes */
 #define LIBXSMM_ERR_GENERAL               90000
@@ -398,6 +557,33 @@
     GENERATED_CODE, ERROR_CODE, LIBXSMM_FUNCNAME, 1)
 #endif
 
+/* tile config structure */
+typedef struct libxsmm_tile_config {
+  unsigned char  palette_id;
+  unsigned short tile0rowsb;
+  unsigned char  tile0cols;
+  unsigned short tile1rowsb;
+  unsigned char  tile1cols;
+  unsigned short tile2rowsb;
+  unsigned char  tile2cols;
+  unsigned short tile3rowsb;
+  unsigned char  tile3cols;
+  unsigned short tile4rowsb;
+  unsigned char  tile4cols;
+  unsigned short tile5rowsb;
+  unsigned char  tile5cols;
+  unsigned short tile6rowsb;
+  unsigned char  tile6cols;
+  unsigned short tile7rowsb;
+  unsigned char  tile7cols;
+} libxsmm_tile_config;
+
+/* structure for tracking local labels in assembly we don't allow overlapping loops */
+LIBXSMM_EXTERN_C typedef struct libxsmm_loop_label_tracker_struct {
+  unsigned int label_address[512];
+  unsigned int label_count;
+} libxsmm_loop_label_tracker;
+
 /* micro kernel configuration */
 LIBXSMM_EXTERN_C typedef struct libxsmm_micro_kernel_config {
   unsigned int instruction_set;
@@ -428,9 +614,14 @@ LIBXSMM_EXTERN_C typedef struct libxsmm_micro_kernel_config {
   unsigned int fused_bcolbias;
   unsigned int fused_scolbias;
   unsigned int fused_relu;
+  unsigned int fused_relu_bwd;
   unsigned int fused_sigmoid;
   unsigned int overwrite_C;
   unsigned int vnni_format_C;
+  unsigned int sparsity_factor_A;
+  unsigned int decompress_A;
+  unsigned int vnni_cvt_output_ext_buf;
+  unsigned int norm_to_normT_B_ext_buf;
 
   /* Register names/logistics for fusion boo-keeping  */
   unsigned int reserved_zmms;
@@ -454,6 +645,10 @@ LIBXSMM_EXTERN_C typedef struct libxsmm_micro_kernel_config {
   unsigned int vec_halves;
   unsigned int mask_hi;
   unsigned int mask_lo;
+  unsigned int perm_table_vnni_lo;
+  unsigned int perm_table_vnni_hi;
+  unsigned int norm_to_normT_mask_reg_0;
+  unsigned int norm_to_normT_mask_reg_1;
 
   /* Auxiliary arrays for micro-kernel iteration space traversal */
   int use_paired_tilestores;
@@ -463,6 +658,27 @@ LIBXSMM_EXTERN_C typedef struct libxsmm_micro_kernel_config {
   int _C_tile_mate_id[4];
   int _im_offset_prefix_sums[4];
   int _in_offset_prefix_sums[4];
+
+  /* Auxiliary data structure and fields when emulating AMX instructions */
+  libxsmm_tile_config tile_config;
+  unsigned int emulation_scratch_offset;
+  unsigned int lda_emu;
+  unsigned int ldb_emu;
+  unsigned int ldc_emu;
+  unsigned int emulate_cvt2bf16fp32;
+  unsigned int emulate_cvt2bf16fp32_vperm;
+  unsigned int emulate_cvt2bf16fp32_vaux;
+  unsigned int emulate_cvt2bf16fp32_vaux0;
+  unsigned int emulate_cvt2bf16fp32_vaux1;
+  unsigned int mask_cvt_hi;
+  unsigned int mask_cvt_lo;
+  libxsmm_loop_label_tracker *io_loop_label_tracker;
+
+  /* Auxiliary fields to propagate kernel info */
+  unsigned int k_amx_microkernel;
+  unsigned int B_offs_trans;
+  unsigned int stride_b_trans;
+
 } libxsmm_micro_kernel_config;
 
 /* structure for storing the current gp reg mapping */
@@ -494,6 +710,9 @@ LIBXSMM_EXTERN_C typedef struct libxsmm_gp_reg_mapping_struct {
   unsigned int gp_reg_help_3;
   unsigned int gp_reg_help_4;
   unsigned int gp_reg_help_5;
+/* Auxiliary regs for sparsity in A support  */
+  unsigned int gp_reg_bitmap_a;
+  unsigned int gp_reg_decompressed_a;
 } libxsmm_gp_reg_mapping;
 
 /* structure for storing the current gp reg mapping for matcopy */
@@ -529,6 +748,7 @@ LIBXSMM_EXTERN_C typedef struct libxsmm_matcopy_kernel_config_struct {
 LIBXSMM_EXTERN_C typedef struct libxsmm_mateltwise_gp_reg_mapping_struct {
   unsigned int gp_reg_param_struct;
   unsigned int gp_reg_in;
+  unsigned int gp_reg_in_pf;
   unsigned int gp_reg_ldi;
   unsigned int gp_reg_out;
   unsigned int gp_reg_ldo;
@@ -543,6 +763,11 @@ LIBXSMM_EXTERN_C typedef struct libxsmm_mateltwise_gp_reg_mapping_struct {
   unsigned int gp_reg_bias_vals2;
   unsigned int gp_reg_m_loop;
   unsigned int gp_reg_n_loop;
+  unsigned int gp_reg_n;
+  unsigned int gp_reg_ind_base;
+  unsigned int gp_reg_in_base;
+  unsigned int gp_reg_invec;
+  unsigned int gp_reg_scale_base;
 } libxsmm_mateltwise_gp_reg_mapping;
 
 /* mateltwise kernel configuration */
@@ -586,12 +811,6 @@ LIBXSMM_EXTERN_C typedef struct libxsmm_transpose_kernel_config_struct {
   char vector_name;
 } libxsmm_transpose_kernel_config;
 
-/* structure for tracking local labels in assembly we don't allow overlapping loops */
-LIBXSMM_EXTERN_C typedef struct libxsmm_loop_label_tracker_struct {
-  unsigned int label_address[512];
-  unsigned int label_count;
-} libxsmm_loop_label_tracker;
-
 /* structure to save jump properties to the same destination */
 LIBXSMM_EXTERN_C typedef struct libxsmm_jump_source_struct {
   unsigned int instr_type[512];
@@ -612,27 +831,6 @@ LIBXSMM_EXTERN_C typedef struct libxsmm_blocking_info_t {
   unsigned int block_size;
 } libxsmm_blocking_info_t;
 
-/* tile config structure */
-typedef struct libxsmm_tile_config {
-  unsigned char  palette_id;
-  unsigned char  tile0rows;
-  unsigned char  tile0cols;
-  unsigned char  tile1rows;
-  unsigned char  tile1cols;
-  unsigned char  tile2rows;
-  unsigned char  tile2cols;
-  unsigned char  tile3rows;
-  unsigned char  tile3cols;
-  unsigned char  tile4rows;
-  unsigned char  tile4cols;
-  unsigned char  tile5rows;
-  unsigned char  tile5cols;
-  unsigned char  tile6rows;
-  unsigned char  tile6cols;
-  unsigned char  tile7rows;
-  unsigned char  tile7cols;
-} libxsmm_tile_config;
-
 /* Auxiliary stach variable enumeration in GEMM */
 typedef enum libxsmm_gemm_stack_var {
   LIBXSMM_GEMM_STACK_VAR_NONE               =  0,
@@ -647,9 +845,17 @@ typedef enum libxsmm_gemm_stack_var {
   LIBXSMM_GEMM_STACK_VAR_ARG_7              =  9,
   LIBXSMM_GEMM_STACK_VAR_ARG_8              = 10,
   LIBXSMM_GEMM_STACK_VAR_ARG_9              = 11,
-  LIBXSMM_GEMM_STACK_VAR_ARG_10             = 12
+  LIBXSMM_GEMM_STACK_VAR_ARG_10             = 12,
+  LIBXSMM_GEMM_STACK_VAR_ELT_BUF1           = 13,
+  LIBXSMM_GEMM_STACK_VAR_ELT_BUF2           = 14,
+  LIBXSMM_GEMM_STACK_VAR_ELT_BITMAP_PTR     = 15,
+  LIBXSMM_GEMM_STACK_VAR_ELT_DECOMPRESS_BUF = 16,
+  LIBXSMM_GEMM_STACK_VAR_TRANS_EXT_BUF_B    = 17,
+  LIBXSMM_GEMM_STACK_VAR_TRANS_EXT_BUF_C    = 18,
+  LIBXSMM_GEMM_STACK_VAR_ELT_RELU_BITMASK_PTR    = 19
 } libxsmm_gemm_stack_var;
 
+#if 0
 /* compressed meltw reduce structure */
 typedef enum libxsmm_meltw_comp_redu_flags {
   LIBXSMM_MELTW_COMP_FLAG_REDUCE_NONE         = 0,
@@ -663,8 +869,17 @@ typedef enum libxsmm_meltw_comp_redu_flags {
   LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_ROWS  = 8,
   LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_COLS  = 9,
   LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_ROWS_ELTS_ELTS_SQUARED  = 10,
-  LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_COLS_ELTS_ELTS_SQUARED  = 11
+  LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_COLS_ELTS_ELTS_SQUARED  = 11,
+  LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_ROWS_ELTS               = 12,
+  LIBXSMM_MELTW_COMP_FLAG_REDUCE_OP_ADD_COLS_ELTS               = 13
 } libxsmm_meltw_comp_redu_flags;
+
+/* compressed meltw relu structure */
+typedef enum libxsmm_meltw_comp_relu_flags {
+  LIBXSMM_MELTW_COMP_FLAG_RELU_NONE         = 0,
+  LIBXSMM_MELTW_COMP_FLAG_RELU_FWD          = 1,
+  LIBXSMM_MELTW_COMP_FLAG_RELU_BWD          = 2
+} libxsmm_meltw_comp_relu_flags;
 
 /* compressed meltw scale structure */
 typedef enum libxsmm_meltw_comp_scal_flags {
@@ -713,28 +928,29 @@ typedef enum libxsmm_meltw_comp_acvt_flags {
 } libxsmm_meltw_comp_acvt_flags;
 
 /* compressed meltw cbiasact strcuture */
-typedef enum libxsmm_meltw_comp_cbiasact_flags {
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_NONE                         =  0,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS                      =  1,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_RELU                     =  2,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_TANH                     =  3,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_SIGM                     =  4,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_GELU                     =  5,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_OVERWRITE_C                  =  6,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_RELU             =  7,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_TANH             =  8,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_SIGM             =  9,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_GELU             = 10,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_RELU_OVERWRITE_C = 11,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_TANH_OVERWRITE_C = 12,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_SIGM_OVERWRITE_C = 13,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_ACT_GELU_OVERWRITE_C = 14,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_COLBIAS_OVERWRITE_C          = 15,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_RELU_OVERWRITE_C         = 16,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_TANH_OVERWRITE_C         = 17,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_SIGM_OVERWRITE_C         = 18,
-  LIBXSMM_MELTW_COMP_FLAG_CBIASACT_ACT_GELU_OVERWRITE_C         = 19
-} libxsmm_meltw_comp_cbiasact_flags;
+typedef enum libxsmm_meltw_comp_flags {
+  LIBXSMM_MELTW_COMP_FLAG_NONE                         =  0,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS                      =  1,
+  LIBXSMM_MELTW_COMP_FLAG_ACT_RELU                     =  2,
+  LIBXSMM_MELTW_COMP_FLAG_ACT_TANH                     =  3,
+  LIBXSMM_MELTW_COMP_FLAG_ACT_SIGM                     =  4,
+  LIBXSMM_MELTW_COMP_FLAG_ACT_GELU                     =  5,
+  LIBXSMM_MELTW_COMP_FLAG_OVERWRITE_C                  =  6,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_ACT_RELU             =  7,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_ACT_TANH             =  8,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_ACT_SIGM             =  9,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_ACT_GELU             = 10,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_ACT_RELU_OVERWRITE_C = 11,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_ACT_TANH_OVERWRITE_C = 12,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_ACT_SIGM_OVERWRITE_C = 13,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_ACT_GELU_OVERWRITE_C = 14,
+  LIBXSMM_MELTW_COMP_FLAG_COLBIAS_OVERWRITE_C          = 15,
+  LIBXSMM_MELTW_COMP_FLAG_ACT_RELU_OVERWRITE_C         = 16,
+  LIBXSMM_MELTW_COMP_FLAG_ACT_TANH_OVERWRITE_C         = 17,
+  LIBXSMM_MELTW_COMP_FLAG_ACT_SIGM_OVERWRITE_C         = 18,
+  LIBXSMM_MELTW_COMP_FLAG_ACT_GELU_OVERWRITE_C         = 19
+} libxsmm_meltw_comp_flags;
+#endif
 
 LIBXSMM_API_INTERN
 void libxsmm_reset_loop_label_tracker( libxsmm_loop_label_tracker* io_loop_label_tracker );
@@ -757,6 +973,9 @@ void libxsmm_get_x86_instr_name( const unsigned int i_instr_number,
 
 LIBXSMM_API_INTERN
 void libxsmm_reset_x86_gp_reg_mapping( libxsmm_gp_reg_mapping* io_gp_reg_mapping );
+
+LIBXSMM_API_INTERN
+void libxsmm_reset_aarch64_gp_reg_mapping( libxsmm_gp_reg_mapping* io_gp_reg_mapping );
 
 LIBXSMM_API_INTERN
 unsigned int libxsmm_is_x86_vec_instr_single_precision( const unsigned int i_instr_number );
@@ -791,18 +1010,6 @@ LIBXSMM_API_INTERN unsigned int libxsmm_compute_equalized_blocking(
   unsigned int i_size, unsigned int i_max_block,
   unsigned int* o_range_1, unsigned int* o_block_1,
   unsigned int* o_range_2, unsigned int* o_block_2 );
-
-/** helper functions for compressing and decompressing meltw flags */
-LIBXSMM_API_INTERN libxsmm_meltw_comp_redu_flags libxsmm_get_meltw_comp_redu_flags( libxsmm_meltw_redu_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_redu_flags libxsmm_get_meltw_redu_flags( libxsmm_meltw_comp_redu_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_comp_scal_flags libxsmm_get_meltw_comp_scal_flags( libxsmm_meltw_scal_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_scal_flags libxsmm_get_meltw_scal_flags( libxsmm_meltw_comp_scal_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_comp_cvta_flags libxsmm_get_meltw_comp_cvta_flags( libxsmm_meltw_cvta_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_cvta_flags libxsmm_get_meltw_cvta_flags( libxsmm_meltw_comp_cvta_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_comp_acvt_flags libxsmm_get_meltw_comp_acvt_flags( libxsmm_meltw_acvt_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_acvt_flags libxsmm_get_meltw_acvt_flags( libxsmm_meltw_comp_acvt_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_comp_cbiasact_flags libxsmm_get_meltw_comp_cbiasact_flags( libxsmm_meltw_cbiasact_flags flags );
-LIBXSMM_API_INTERN libxsmm_meltw_cbiasact_flags libxsmm_get_meltw_cbiasact_flags( libxsmm_meltw_comp_cbiasact_flags flags );
 
 #endif /* GENERATOR_COMMON_H */
 

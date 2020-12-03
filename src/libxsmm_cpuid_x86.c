@@ -151,6 +151,12 @@ LIBXSMM_API int libxsmm_cpuid_x86(libxsmm_cpuid_x86_info* info)
           }
         }
       }
+      else if (LIBXSMM_X86_SSE4 == feature_cpu) {
+        /* assume FXSAVE, which should be fine
+         * 16 years after the first x86_64 OS
+         */
+        feature_os = LIBXSMM_X86_SSE4;
+      }
       else feature_os = LIBXSMM_TARGET_ARCH_GENERIC;
       has_context = (LIBXSMM_STATIC_TARGET_ARCH >= feature_cpu || feature_os >= feature_cpu) ? 1 : 0;
       if (LIBXSMM_TARGET_ARCH_UNKNOWN == result && 0 != libxsmm_verbosity) { /* library code is expected to be mute */
@@ -205,7 +211,12 @@ LIBXSMM_API int libxsmm_cpuid_x86(libxsmm_cpuid_x86_info* info)
 
 LIBXSMM_API int libxsmm_cpuid(void)
 {
+#if defined(__aarch64__)
+  /* @TODO add AARCH64 feature check */
+  return LIBXSMM_AARCH64_V81;
+#else
   return libxsmm_cpuid_x86(NULL/*info*/);
+#endif
 }
 
 
@@ -251,6 +262,9 @@ LIBXSMM_API const char* libxsmm_cpuid_name(int id)
        */
       target_arch = "wsm";
     } break;
+    case LIBXSMM_AARCH64_V81: {
+      target_arch = "aarch64";
+    } break;
     case LIBXSMM_TARGET_ARCH_GENERIC: {
       target_arch = "generic";
     } break;
@@ -277,6 +291,9 @@ LIBXSMM_API int libxsmm_cpuid_vlen32(int id)
     result = 8;
   }
   else if (LIBXSMM_X86_SSE3 <= id) {
+    result = 4;
+  }
+  else if (LIBXSMM_AARCH64_V81 == id) {
     result = 4;
   }
   else { /* scalar */

@@ -117,7 +117,7 @@ LIBXSMM_API_INTERN void libxsmm_generator_gemm_avx512_microkernel_nofsdbcst( lib
           3, ( l_m == (l_m_blocking - 1) ) ? i_micro_kernel_config->use_masking_a_c : 0, 1, 0 );
 
       /* In case of batch reduce try to prefetch a few more columns ahead...  */
-      if ((LIBXSMM_GEMM_PRECISION_I8 != LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype)) && (LIBXSMM_GEMM_PRECISION_BF16 != LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype)) && ((i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_ADDRESS) || (i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_OFFSET) || (i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_STRIDE))) {
+      if ((LIBXSMM_GEMM_PRECISION_I8 != LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype)) && ((i_xgemm_desc->prefetch & LIBXSMM_GEMM_PREFETCH_BRGEMM_OOB) > 0) && (LIBXSMM_GEMM_PRECISION_BF16 != LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype)) && ((i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_ADDRESS) || (i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_OFFSET) || (i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_STRIDE))) {
         unsigned int pf_a_cols_ahead = 16;
         if (i_xgemm_desc->lda == 1024) {
           pf_a_cols_ahead = 4;
@@ -445,7 +445,7 @@ LIBXSMM_API_INTERN void libxsmm_generator_gemm_avx512_microkernel_nofsdbcst( lib
       }
 
       /* In case of batch reduce try to prefetch a few more columns ahead for A...  */
-      if ((l_n < l_m_blocking)  &&  (LIBXSMM_GEMM_PRECISION_I8 != LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype)) && (LIBXSMM_GEMM_PRECISION_BF16 != LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype)) && ((i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_ADDRESS) || (i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_OFFSET) || (i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_STRIDE))) {
+      if ((l_n < l_m_blocking)  && ((i_xgemm_desc->prefetch & LIBXSMM_GEMM_PREFETCH_BRGEMM_OOB) > 0) && (LIBXSMM_GEMM_PRECISION_I8 != LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype)) && (LIBXSMM_GEMM_PRECISION_BF16 != LIBXSMM_GETENUM_INP( i_xgemm_desc->datatype)) && ((i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_ADDRESS) || (i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_OFFSET) || (i_xgemm_desc->flags & LIBXSMM_GEMM_FLAG_BATCH_REDUCE_STRIDE))) {
         unsigned int pf_a_cols_ahead = 16;
         if (i_xgemm_desc->lda == 1024) {
           pf_a_cols_ahead = 4;
@@ -659,29 +659,29 @@ LIBXSMM_API_INTERN void libxsmm_generator_gemm_avx512_microkernel_fsdbcst( libxs
       /* we put "0" elements of A matrix into zmm3 */
       libxsmm_x86_instruction_vec_shuffle_reg(io_generated_code,
           io_generated_code->arch,
-          LIBXSMM_X86_INSTR_VPSLLD,
+          LIBXSMM_X86_INSTR_VPSLLD_I,
           i_micro_kernel_config->vector_name,
           l_k%2,
-          3,
           LIBXSMM_X86_VEC_REG_UNDEF,
+          3,
           16);
 
       /* we put "1" elements of A matrix into l_k%2 zmm*/
       libxsmm_x86_instruction_vec_shuffle_reg(io_generated_code,
           io_generated_code->arch,
-          LIBXSMM_X86_INSTR_VPSRAD,
+          LIBXSMM_X86_INSTR_VPSRAD_I,
           i_micro_kernel_config->vector_name,
           l_k%2,
-          l_k%2,
           LIBXSMM_X86_VEC_REG_UNDEF,
+          l_k%2,
           16);
       libxsmm_x86_instruction_vec_shuffle_reg(io_generated_code,
           io_generated_code->arch,
-          LIBXSMM_X86_INSTR_VPSLLD,
+          LIBXSMM_X86_INSTR_VPSLLD_I,
           i_micro_kernel_config->vector_name,
           l_k%2,
-          l_k%2,
           LIBXSMM_X86_VEC_REG_UNDEF,
+          l_k%2,
           16);
     }
 
@@ -850,19 +850,19 @@ LIBXSMM_API_INTERN void libxsmm_generator_gemm_avx512_microkernel_fsdbcst( libxs
             /* we put "1" elements of B matrix into zmm2 */
             libxsmm_x86_instruction_vec_shuffle_reg(io_generated_code,
                 io_generated_code->arch,
-                LIBXSMM_X86_INSTR_VPSRAD,
+                LIBXSMM_X86_INSTR_VPSRAD_I,
                 i_micro_kernel_config->vector_name,
                 2,
-                2,
                 LIBXSMM_X86_VEC_REG_UNDEF,
+                2,
                 16);
             libxsmm_x86_instruction_vec_shuffle_reg(io_generated_code,
                 io_generated_code->arch,
-                LIBXSMM_X86_INSTR_VPSLLD,
+                LIBXSMM_X86_INSTR_VPSLLD_I,
                 i_micro_kernel_config->vector_name,
                 2,
-                2,
                 LIBXSMM_X86_VEC_REG_UNDEF,
+                2,
                 16);
 
             /* perform fma operations for multiplying "1" elements of A and B */
@@ -887,11 +887,11 @@ LIBXSMM_API_INTERN void libxsmm_generator_gemm_avx512_microkernel_fsdbcst( libxs
             /* we put "0" elements of B matrix into zmm2 */
             libxsmm_x86_instruction_vec_shuffle_reg(io_generated_code,
                 io_generated_code->arch,
-                LIBXSMM_X86_INSTR_VPSLLD,
+                LIBXSMM_X86_INSTR_VPSLLD_I,
                 i_micro_kernel_config->vector_name,
                 2,
-                2,
                 LIBXSMM_X86_VEC_REG_UNDEF,
+                2,
                 16);
 
             /* perform fma operations for multiplying "0" elements of A and B */

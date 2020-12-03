@@ -68,7 +68,8 @@
       (defined(__amd64__) && 0 != (__amd64__)) || \
       (defined(_M_X64) || defined(_M_AMD64)) || \
       (defined(_WIN64)) || \
-      (defined(__powerpc64))
+      (defined(__powerpc64)) || \
+      (defined(__aarch64__))
 #   define LIBXSMM_UNLIMITED 0xFFFFFFFFFFFFFFFF
 #   define LIBXSMM_BITS 64
 # elif !defined(LIBXSMM_PLATFORM_FORCE) && defined(NDEBUG)
@@ -474,7 +475,7 @@
 #define LIBXSMM_SIZEOF(START, LAST) (((const char*)(LAST)) - ((const char*)(START)) + sizeof(*LAST))
 #define LIBXSMM_FEQ(A, B) ((A) == (B))
 #define LIBXSMM_NEQ(A, B) ((A) != (B))
-#define LIBXSMM_ISPOT(A) ((unsigned long long)(A) == LIBXSMM_LO2POT(A))
+#define LIBXSMM_ISPOT(A) (0 != (A) && !((A) & ((A) - 1)))
 #define LIBXSMM_ISWAP(A, B) (((A) ^= (B)), ((B) ^= (A)), ((A) ^= (B)))
 #define LIBXSMM_ISNAN(A)  LIBXSMM_NEQ(A, A)
 #define LIBXSMM_NOTNAN(A) LIBXSMM_FEQ(A, A)
@@ -775,7 +776,7 @@ LIBXSMM_API_INLINE int libxsmm_nonconst_int(int i) { return i; }
 # endif
 #endif
 #if !defined(LIBXSMM_ASSERT_MSG)
-# define LIBXSMM_ASSERT_MSG(EXPR, MSG) assert((EXPR) && (0 != *(MSG)))
+# define LIBXSMM_ASSERT_MSG(EXPR, MSG) assert((EXPR) && *MSG)
 #endif
 #if !defined(LIBXSMM_EXPECT_ELIDE)
 # define LIBXSMM_EXPECT_ELIDE(RESULT, EXPR) do { \

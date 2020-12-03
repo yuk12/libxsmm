@@ -31,6 +31,10 @@
 # define LIBXSMM_PAGE_MINSIZE 4096 /* 4 KB */
 #endif
 
+#if !defined(LIBXSMM_BATCH_CHECK) && !defined(NDEBUG)
+# define LIBXSMM_BATCH_CHECK
+#endif
+
 #if !defined(LIBXSMM_NTHREADS_MAX)
 # if (0 != LIBXSMM_SYNC)
 #   define LIBXSMM_NTHREADS_MAX 1024
@@ -164,9 +168,9 @@
     | (LIBXSMM_NEQ(0, BETA) ? 0 : LIBXSMM_GEMM_FLAG_BETA_0)); \
   (DESCRIPTOR).m   = (unsigned int)(M);   (DESCRIPTOR).n   = (unsigned int)(N);   (DESCRIPTOR).k   = (unsigned int)(K); \
   (DESCRIPTOR).lda = (unsigned int)(LDA); (DESCRIPTOR).ldb = (unsigned int)(LDB); (DESCRIPTOR).ldc = (unsigned int)(LDC); \
-  LIBXSMM_PAD((DESCRIPTOR).pad = 0) (DESCRIPTOR).c1 = 0; (DESCRIPTOR).c2 = 0; (DESCRIPTOR).c3 = 0; \
+  (DESCRIPTOR).meltw_datatype_aux = 0; (DESCRIPTOR).c1 = 0; (DESCRIPTOR).c2 = 0; (DESCRIPTOR).c3 = 0; \
   (DESCRIPTOR).meltw_ldx = 0; (DESCRIPTOR).meltw_ldy = 0; (DESCRIPTOR).meltw_ldz = 0; \
-  (DESCRIPTOR).meltw_datatype_aux = 0; (DESCRIPTOR).meltw_flags = 0; \
+  (DESCRIPTOR).meltw_param = 0; (DESCRIPTOR).meltw_flags = 0; \
   (DESCRIPTOR).meltw_operation = 0
 
 /** Similar to LIBXSMM_GEMM_DESCRIPTOR, but separately taking the input-/output-precision. */
@@ -208,20 +212,23 @@ LIBXSMM_EXTERN_C LIBXSMM_PACKED(struct LIBXSMM_RETARGETABLE) libxsmm_gemm_descri
   unsigned char prefetch;
   /** Denotes the data-type. */
   unsigned char datatype;
-  /** Ignored entry. */
-  LIBXSMM_PAD(unsigned char pad)
-  /** multipurpose 64bit field, currently used for: a) stride_a in brgemm */
+  /**
+   * Do not reorder elements between above and below blocks!
+   */
+  /** Denotes of optional eltwise data-type */
+  unsigned char meltw_datatype_aux;
+  /** multipurpose 64-bit field, currently used for: a) stride_a in brgemm */
   unsigned long long c1;
-  /** multipurpose 64bit field, currently used for: a) stride_b in brgemm */
+  /** multipurpose 64-bit field, currently used for: a) stride_b in brgemm */
   unsigned long long c2;
-  /** multipurpose 8bit field, currently used for: a) unroll hint in brgemm */
+  /** multipurpose 8-bit field, currently used for: a) unroll hint in brgemm */
   unsigned char c3;
   /** LDx, LDy, LDz,  additional meltw LDs */
   unsigned int meltw_ldx, meltw_ldy, meltw_ldz;
-  /** Size of data element. */
-  unsigned char meltw_datatype_aux;
+  /** optional param field */
+  unsigned char meltw_param;
   /** Set of flags */
-  unsigned char meltw_flags;
+  unsigned short meltw_flags;
   /** operation specifier */
   unsigned char meltw_operation;
 };
@@ -248,7 +255,9 @@ LIBXSMM_EXTERN_C LIBXSMM_PACKED(struct LIBXSMM_RETARGETABLE) libxsmm_meltw_descr
   unsigned char datatype;
   unsigned char datatype2;
   /** Set of flags */
-  unsigned char flags;
+  unsigned short flags;
+  /** optional param field */
+  unsigned char param;
   /** operation specifier */
   unsigned char operation;
 };
@@ -297,21 +306,21 @@ LIBXSMM_EXTERN_C LIBXSMM_PACKED(struct LIBXSMM_RETARGETABLE) libxsmm_trsm_descri
   char transa;
 };
 
-LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE LIBXSMM_MAY_ALIAS libxsmm_csr_soa_descriptor {
+LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE LIBXSMM_MAY_ALIAS libxsmm_pspgemm_csr_descriptor {
   const libxsmm_gemm_descriptor* gemm;
   const unsigned int* row_ptr;
   const unsigned int* column_idx;
   const void* values;
   unsigned int packed_width;
-} libxsmm_csr_soa_descriptor;
+} libxsmm_pspgemm_csr_descriptor;
 
-LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE LIBXSMM_MAY_ALIAS libxsmm_csc_soa_descriptor {
+LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE LIBXSMM_MAY_ALIAS libxsmm_pspgemm_csc_descriptor {
   const libxsmm_gemm_descriptor* gemm;
   const unsigned int* column_ptr;
   const unsigned int* row_idx;
   const void* values;
   unsigned int packed_width;
-} libxsmm_csc_soa_descriptor;
+} libxsmm_pspgemm_csc_descriptor;
 
 LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE LIBXSMM_MAY_ALIAS libxsmm_pgemm_ac_rm_descriptor {
   const libxsmm_gemm_descriptor* gemm;
@@ -678,6 +687,8 @@ LIBXSMM_EXTERN_C struct LIBXSMM_RETARGETABLE libxsmm_dnn_fullyconnected {
   int upd_column_teams;
   int ifm_subtasks;
   int ofm_subtasks;
+  int compressed_A;
+  int sparsity_factor_A;
 
   int fm_lp_block;
   int bn;
@@ -701,6 +712,14 @@ LIBXSMM_EXTERN_C struct LIBXSMM_RETARGETABLE libxsmm_dnn_fullyconnected {
   libxsmm_code_pointer gemm_fwd6;    /* ability to hoist forward GEMMs */
   libxsmm_code_pointer gemm_fwd7;    /* ability to hoist forward GEMMs */
   libxsmm_code_pointer gemm_fwd8;    /* ability to hoist forward GEMMs */
+  libxsmm_code_pointer gemm_fwd9;    /* ability to hoist forward GEMMs */
+  libxsmm_code_pointer gemm_fwd10;   /* ability to hoist forward GEMMs */
+  libxsmm_code_pointer gemm_fwd11;   /* ability to hoist forward GEMMs */
+  libxsmm_code_pointer gemm_fwd12;   /* ability to hoist forward GEMMs */
+  libxsmm_code_pointer gemm_fwd13;   /* ability to hoist forward GEMMs */
+  libxsmm_code_pointer gemm_fwd14;   /* ability to hoist forward GEMMs */
+  libxsmm_code_pointer gemm_fwd15;   /* ability to hoist forward GEMMs */
+  libxsmm_code_pointer gemm_fwd16;   /* ability to hoist forward GEMMs */
 
   libxsmm_code_pointer gemm_bwd;     /* ability to hoist backward GEMMs */
   libxsmm_code_pointer gemm_bwd2;    /* ability to hoist backward GEMMs */
@@ -712,6 +731,7 @@ LIBXSMM_EXTERN_C struct LIBXSMM_RETARGETABLE libxsmm_dnn_fullyconnected {
   /* JITed eltwise kernels... */
   libxsmm_meltwfunction_cvtfp32bf16     fwd_cvtfp32bf16_kernel;
   libxsmm_meltwfunction_cvtfp32bf16     bwd_cvtfp32bf16_kernel;
+  libxsmm_meltwfunction_relu            bwd_relu_kernel;
   libxsmm_meltwfunction_cvtfp32bf16_act fwd_cvtfp32bf16_relu_kernel;
   libxsmm_meltwfunction_act_cvtfp32bf16 fwd_sigmoid_cvtfp32bf16_kernel;
 };
@@ -854,15 +874,21 @@ typedef enum libxsmm_build_kind {
   LIBXSMM_BUILD_KIND_USER       = LIBXSMM_KERNEL_KIND_USER,
   LIBXSMM_BUILD_KIND_PGEMMRMAC  = LIBXSMM_KERNEL_UNREGISTERED,
   LIBXSMM_BUILD_KIND_PGEMMRMBC,
-  LIBXSMM_BUILD_KIND_SRSOA,
-  LIBXSMM_BUILD_KIND_SCSOA,
+  LIBXSMM_BUILD_KIND_PSPGEMM_CSR,
+  LIBXSMM_BUILD_KIND_PSPGEMM_CSC,
   LIBXSMM_BUILD_KIND_SREG
 } libxsmm_build_kind;
 
 /** Integral type (libxsmm_kernel_kind, libxsmm_build_kind). */
 #if defined(LIBXSMM_UNPACKED)
-typedef size_t libxsmm_descriptor_kind;
+# define LIBXSMM_DESCRIPTOR_BIG(KIND) ((libxsmm_descriptor_kind)((KIND) | 0x8000000000000000))
+# define LIBXSMM_DESCRIPTOR_ISBIG(KIND) ((int)(((libxsmm_descriptor_kind)(KIND)) >> 63))
+# define LIBXSMM_DESCRIPTOR_KIND(KIND) ((int)(((libxsmm_descriptor_kind)(KIND)) & 0x7FFFFFFFFFFFFFFF))
+typedef uint64_t libxsmm_descriptor_kind;
 #else
+# define LIBXSMM_DESCRIPTOR_BIG(KIND) ((libxsmm_descriptor_kind)((KIND) | 0x80))
+# define LIBXSMM_DESCRIPTOR_ISBIG(KIND) ((int)((KIND) >> 7))
+# define LIBXSMM_DESCRIPTOR_KIND(KIND) ((int)((KIND) & 0x7F))
 typedef unsigned char libxsmm_descriptor_kind;
 #endif
 
@@ -878,8 +904,8 @@ LIBXSMM_EXTERN_C typedef struct LIBXSMM_RETARGETABLE libxsmm_build_request {
   union {
     const void* ptr; /* raw content */
     LIBXSMM_REGDESC(LIBXSMM_REGDESC_DEFAULT, const*);
-    const libxsmm_csr_soa_descriptor* srsoa;
-    const libxsmm_csc_soa_descriptor* scsoa;
+    const libxsmm_pspgemm_csr_descriptor* pspgemm_csr;
+    const libxsmm_pspgemm_csc_descriptor* pspgemm_csc;
     const libxsmm_pgemm_ac_rm_descriptor* pgemmacrm;
     const libxsmm_pgemm_bc_rm_descriptor* pgemmbcrm;
     const libxsmm_csr_reg_descriptor* sreg;
@@ -986,15 +1012,15 @@ LIBXSMM_API_INTERN int libxsmm_malloc_attrib(void** memory, int flags,
   /** If a name is given, an executable buffer will be dumped into a file. */
   const char* name);
 
+/** Like libxsmm_release_scratch, but takes a lock (can be NULL). */
+LIBXSMM_API_INTERN void libxsmm_xrelease_scratch(LIBXSMM_LOCK_TYPE(LIBXSMM_LOCK)* lock);
+
 /** Allocate memory of the requested size, which is aligned according to the given alignment. */
-LIBXSMM_API_INTERN int libxsmm_xmalloc(void** memory, size_t size, size_t alignment, int flags,
+LIBXSMM_API int libxsmm_xmalloc(void** memory, size_t size, size_t alignment, int flags,
   /* The extra information is stored along with the allocated chunk; can be NULL/zero. */
   const void* extra, size_t extra_size);
 /** Release memory, which was allocated using libxsmm_[*]malloc. */
-LIBXSMM_API_INTERN void libxsmm_xfree(const void* memory, int check);
-
-/** Like libxsmm_release_scratch, but takes a lock (can be NULL). */
-LIBXSMM_API_INTERN void libxsmm_xrelease_scratch(LIBXSMM_LOCK_TYPE(LIBXSMM_LOCK)* lock);
+LIBXSMM_API void libxsmm_xfree(const void* memory, int check);
 
 /**
  * Format for instance an amount of Bytes like libxsmm_format_size(result, sizeof(result), nbytes, "KMGT", "B", 10).
@@ -1004,6 +1030,9 @@ LIBXSMM_API_INTERN size_t libxsmm_format_size(char buffer[32], int buffer_size, 
 
 /** Returns the type-name of data-type (can be also libxsmm_gemm_precision). */
 LIBXSMM_API_INTERN const char* libxsmm_typename(libxsmm_datatype datatype);
+
+/** Dump data and (optionally) checks attempt to dump different data into an existing file (unique). */
+LIBXSMM_API_INTERN int libxsmm_dump(const char* title, const char* name, const void* data, size_t size, int unique);
 
 /** Services a build request, and (optionally) registers the code (use regindex=LIBXSMM_CAPACITY_REGISTRY for unmanaged code). */
 LIBXSMM_API_INTERN int libxsmm_build(const libxsmm_build_request* request, unsigned int regindex, libxsmm_code_pointer* code);

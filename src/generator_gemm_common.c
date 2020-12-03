@@ -31,7 +31,10 @@ int libxsmm_generator_gemm_get_rbp_relative_offset( libxsmm_gemm_stack_var stack
    *      GEMM_scratch ptr in stack (to be filled)  <-- RBP-48
    *      Eltwise bias ptr                          <-- RBP-56
    *      Eltwise output_ptr                        <-- RBP-64
-   */
+   *      Eltwise buf1_ptr                          <-- RBP-72
+   *      Eltwise buf2_ptr                          <-- RBP-80
+   *
+   * */
 
   switch ( stack_var ) {
     case LIBXSMM_GEMM_STACK_VAR_NONE:
@@ -52,6 +55,20 @@ int libxsmm_generator_gemm_get_rbp_relative_offset( libxsmm_gemm_stack_var stack
       return -56;
     case LIBXSMM_GEMM_STACK_VAR_ELT_OUTPUT_PTR:
       return -64;
+    case LIBXSMM_GEMM_STACK_VAR_ELT_RELU_BITMASK_PTR:
+      return -72;
+    case LIBXSMM_GEMM_STACK_VAR_ELT_BUF1:
+      return -72;
+    case LIBXSMM_GEMM_STACK_VAR_ELT_BUF2:
+      return -80;
+    case LIBXSMM_GEMM_STACK_VAR_TRANS_EXT_BUF_B:
+      return -72;
+    case LIBXSMM_GEMM_STACK_VAR_TRANS_EXT_BUF_C:
+      return -80;
+    case LIBXSMM_GEMM_STACK_VAR_ELT_BITMAP_PTR:
+      return -72;
+    case LIBXSMM_GEMM_STACK_VAR_ELT_DECOMPRESS_BUF:
+      return -80;
     case LIBXSMM_GEMM_STACK_VAR_ARG_7:
       return 16;
     case LIBXSMM_GEMM_STACK_VAR_ARG_8:
@@ -1020,11 +1037,11 @@ void libxsmm_generator_gemm_load_C( libxsmm_generated_code*             io_gener
           /* shift 16 bits to the left to generate valid FP32 numbers */
           libxsmm_x86_instruction_vec_shuffle_reg(io_generated_code,
               i_micro_kernel_config->instruction_set,
-              LIBXSMM_X86_INSTR_VPSLLD,
+              LIBXSMM_X86_INSTR_VPSLLD_I,
               i_micro_kernel_config->vector_name,
               l_vec_reg_acc_start + l_m + (l_m_blocking * l_n),
-              l_vec_reg_acc_start + l_m + (l_m_blocking * l_n),
               LIBXSMM_X86_VEC_REG_UNDEF,
+              l_vec_reg_acc_start + l_m + (l_m_blocking * l_n),
               16);
         }
       }
@@ -1304,11 +1321,11 @@ void libxsmm_generator_gemm_store_C( libxsmm_generated_code*             io_gene
         /* shift FP32 by 16bit to right */
         libxsmm_x86_instruction_vec_shuffle_reg(io_generated_code,
             i_micro_kernel_config->instruction_set,
-            LIBXSMM_X86_INSTR_VPSRAD,
+            LIBXSMM_X86_INSTR_VPSRAD_I,
             i_micro_kernel_config->vector_name,
             reg_X,
-            reg_X,
             LIBXSMM_X86_VEC_REG_UNDEF,
+            reg_X,
             16);
 
         /* shift FP32 by 16bit to right */
@@ -1470,8 +1487,8 @@ void libxsmm_generator_gemm_store_C( libxsmm_generated_code*             io_gene
             LIBXSMM_X86_INSTR_VCVTDQ2PS,
             i_micro_kernel_config->vector_name,
             reg_X,
-            reg_X,
-            LIBXSMM_X86_VEC_REG_UNDEF);
+            LIBXSMM_X86_VEC_REG_UNDEF,
+            reg_X );
 
         /* Multiply with scaling factor */
         libxsmm_x86_instruction_vec_compute_reg(  io_generated_code,
