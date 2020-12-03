@@ -4,6 +4,6 @@ export PSM2_MULTI_EP=1
 export OMP_NUM_THREADS=28
 export KMP_AFFINITY=granularity=fine,compact,1,0
 
-mpirun -n 8 -ppn 2 ./mlp_mpi_ovlp_example_f32 8 4 20 7168 0 A 32 32 32 2048 2048 2048 2048 2048 2048 2048 2048 2048 2048 2048
+mpirun -n 8 -ppn 2 ./mlp_mpi_ovlp_example_f32 4 20 7168 0 A 32 32 32 2048 2048 2048 2048 2048 2048 2048 2048 2048 2048 2048
 
 

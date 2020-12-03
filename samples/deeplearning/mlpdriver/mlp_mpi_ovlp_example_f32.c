@@ -101,7 +101,6 @@ int main(int argc, char* argv[])
   /* reading new values from cli */
   i = 1;
   num_layers = argc - 11;
-  if (argc > i) n_procs      = atoi(argv[i++]);
   if (argc > i) n_comm_threads = atoi(argv[i++]);
   if (argc > i) iters      = atoi(argv[i++]);
   if (argc > i) global_MB  = atoi(argv[i++]);
@@ -114,10 +113,10 @@ int main(int argc, char* argv[])
   n_comp_threads = nThreads - n_comm_threads;
   MPI_Request request[n_comm_threads][2];
 
-  MB = global_MB / n_procs;
-
   /* Get the rank of the process */
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
+  MB = global_MB / n_procs;
 
   /* Setup communicators for overlapping threads */
   MPI_Comm comms[n_comm_threads];

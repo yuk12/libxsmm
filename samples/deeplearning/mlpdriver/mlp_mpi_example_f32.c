@@ -28,8 +28,12 @@
 int main(int argc, char* argv[])
 {
   /* Initialize the MPI environment */
-  int threadmode;
-  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &threadmode);
+  int provided;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+  if(provided < MPI_THREAD_MULTIPLE) {
+    printf("The threading support level is lesser than that demanded.\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
 
   float **act_libxsmm, **ref_act_libxsmm, **fil_libxsmm, **delact_libxsmm, **ref_delact_libxsmm, **delfil_libxsmm;
   float **bias_libxsmm, **delbias_libxsmm;
@@ -96,7 +100,6 @@ int main(int argc, char* argv[])
   /* reading new values from cli */
   i = 1;
   num_layers = argc - 10;
-  if (argc > i) n_procs      = atoi(argv[i++]);
   if (argc > i) iters      = atoi(argv[i++]);
   if (argc > i) global_MB  = atoi(argv[i++]);
   if (argc > i) fuse_type  = atoi(argv[i++]);
@@ -105,10 +108,10 @@ int main(int argc, char* argv[])
   if (argc > i) bk         = atoi(argv[i++]);
   if (argc > i) bc         = atoi(argv[i++]);
 
-  MB = global_MB / n_procs;
-
   /* Get the rank of the process */
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
+  MB = global_MB / n_procs;
 
   /* allocate the number of channles buffer */
   if ( num_layers < 1 ) {
