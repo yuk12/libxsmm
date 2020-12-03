@@ -100,7 +100,7 @@ int main(int argc, char* argv[])
 
   /* reading new values from cli */
   i = 1;
-  num_layers = argc - 11;
+  num_layers = argc - 10;
   if (argc > i) n_comm_threads = atoi(argv[i++]);
   if (argc > i) iters      = atoi(argv[i++]);
   if (argc > i) global_MB  = atoi(argv[i++]);

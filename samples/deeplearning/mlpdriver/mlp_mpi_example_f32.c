@@ -99,7 +99,7 @@ int main(int argc, char* argv[])
 
   /* reading new values from cli */
   i = 1;
-  num_layers = argc - 10;
+  num_layers = argc - 9;
   if (argc > i) iters      = atoi(argv[i++]);
   if (argc > i) global_MB  = atoi(argv[i++]);
   if (argc > i) fuse_type  = atoi(argv[i++]);
