@@ -15,22 +15,22 @@ please refer to the README file in 'dgl/examples/pytorch/graphsage' and 'dgl/exa
 Example commands to run expeirments on benchmark datasets:
 Assuming a dual socket system with 28 cores per socket, we use the following commands.
 
-numactl -N 0 -m 0 python train_full.py --n-epochs 200 --dataset reddit 
-numactl -N 0 -m 0 python train_full_ogbn-products.py --n-epochs 300 --dataset ogbn-products
-numactl -N 0 -m 0 python train_full_ogbn-papers.py --n-epochs 200 --dataset ogbn-papers100M 
-numactl -N 0 -m 0 python train_full_proteins.py --n-epochs 200 --dataset proteins
+numactl -N 0 -m 0 python train_full.py --n-epochs 200 --dataset reddit  
+numactl -N 0 -m 0 python train_full_ogbn-products.py --n-epochs 300 --dataset ogbn-products  
+numactl -N 0 -m 0 python train_full_ogbn-papers.py --n-epochs 200 --dataset ogbn-papers100M  
+numactl -N 0 -m 0 python train_full_proteins.py --n-epochs 200 --dataset proteins   
  
 
 
 B. For distributed-memory experiments,
 please refer to the README file in 'dgl/examples/pytorch/graphsage/experimental'
 
-Algorithm cd-0: 
-sh run_dist.sh -n <#sockets> -ppn 2 python train_dist_sym.py --dataset reddit --n-epochs 200 --nr 1
-Algorithm cd-5: 
-sh run_dist.sh -n <#sockets> -ppn 2 python train_dist_sym.py --dataset reddit --n-epochs 200 --nr 5
-Algorithm 0c : 
-sh run_dist.sh -n <#sockets> -ppn 2 python train_dist_sym.py --dataset reddit --n-epochs 200 --nr -1
+Algorithm cd-0:   
+sh run_dist.sh -n <#sockets> -ppn 2 python train_dist_sym.py --dataset reddit --n-epochs 200 --nr 1  
+Algorithm cd-5:   
+sh run_dist.sh -n <#sockets> -ppn 2 python train_dist_sym.py --dataset reddit --n-epochs 200 --nr 5  
+Algorithm 0c :   
+sh run_dist.sh -n <#sockets> -ppn 2 python train_dist_sym.py --dataset reddit --n-epochs 200 --nr -1  
 
 
 
