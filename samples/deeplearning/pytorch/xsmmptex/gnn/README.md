@@ -4,6 +4,8 @@ Neural Networks" is in the form of a pull request (PR) to Deep Graph Library (DG
 We request the user to fetch the codebase from this PR link:  
 https://github.com/dmlc/dgl/pull/2914
 
+We used GCC 8.3.0 and CentOS 7.6/8.0 for compilation and runs.  
+
 
 Required libraries/frameworks:
 1. Pytorch - https://pytorch.org/
@@ -12,8 +14,15 @@ Required libraries/frameworks:
 A. For single socket experiments: 
 please refer to the README file in 'dgl/examples/pytorch/graphsage' and 'dgl/examples/pytorch/rgcn'
 
+
 Example commands to run expeirments on benchmark datasets:
 Assuming a dual socket system with 28 cores per socket, we use the following commands.
+
+We use the following ENV variable settings:
+export OMP_NUM_THREADS=28   
+export KMP_AFFINITY=compact,granularity=fine,1,0    
+export DGL_CPU_INTEL_KERNEL_ENABLED=1
+
 
 numactl -N 0 -m 0 python train_full.py --n-epochs 200 --dataset reddit 
 numactl -N 0 -m 0 python train_full_ogbn-products.py --n-epochs 300 --dataset ogbn-products
