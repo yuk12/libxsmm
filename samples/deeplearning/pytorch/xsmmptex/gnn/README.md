@@ -1,8 +1,6 @@
 The codebase for the paper titled "DistGNN: Scalable Distributed Training for Large-Scale Graph
-Neural Networks" is in the form of a pull request (PR) to Deep Graph Library (DGL) main repository.
-
-We request the user to fetch the codebase from this PR link:  
-https://github.com/dmlc/dgl/pull/2914
+Neural Networks" is available at:  
+https://github.com/sanchit-misra/dgl/tree/xeon-optimizations
 
 We used GCC 8.3.0 and CentOS 7.6/8.0 for compilation and runs.  
 
